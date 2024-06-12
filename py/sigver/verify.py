@@ -18,7 +18,7 @@ def show_help():
     print(f"Usage: {sys.argv[0]} [options] ")
     print()
     print("Options:")
-    print("          --path=<path>             = Path to be signed")
+    print("          --path=<path>             = Path to verify")
     print("          --cert=<certname>         = Name of the certificate to be used")
     print("          --keyvault=<keyvault url> = URL of the keyvault")
     print("          --sigfile=<filename>      = Signature filename")
