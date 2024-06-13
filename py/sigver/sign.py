@@ -12,7 +12,7 @@ from azure.keyvault.keys.crypto import CryptographyClient, SignatureAlgorithm
 from sha256tree import sha256sum
 
 KEY_VAULT_URL = "https://ghaf-devenv-ca.vault.azure.net/"
-CERTIFICATE_NAME = "INT-lenovo-x1-carbon-gen11-debug-x86-64-linux"
+CERTIFICATE_NAME = "."
 
 def show_help():
     print(f"Usage: {sys.argv[0]} [options] ")
