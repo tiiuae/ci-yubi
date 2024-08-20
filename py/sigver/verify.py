@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: 2023 Technology Innovation Institute (TII)
 # SPDX-License-Identifier: Apache-2.0
 
-import hashlib
 import sys
 
 from azure.identity import DefaultAzureCredential
@@ -14,6 +13,7 @@ from sha256tree import sha256sum
 KEY_VAULT_URL = "https://ghaf-devenv-ca.vault.azure.net/"
 CERTIFICATE_NAME = "."
 
+
 def show_help():
     print(f"Usage: {sys.argv[0]} [options] ")
     print()
@@ -25,21 +25,22 @@ def show_help():
     print("")
     sys.exit(0)
 
-def main(args: list[str]):
 
-    path="."
+def main():
+    args = sys.argv[:]
+    path = "."
     key_vault_url = KEY_VAULT_URL
     certificate_name = CERTIFICATE_NAME
     sigfile = "signature.bin"
 
     args.pop(0)
-    
+
     while args and args[0].startswith("--"):
         if args[0] == "--help":
             show_help()
         if args[0].startswith("--path="):
             args[0] = args[0].removeprefix("--path=")
-            path=args[0]
+            path = args[0]
         elif args[0].startswith("--cert="):
             args[0] = args[0].removeprefix("--cert=")
             certificate_name = args[0]
@@ -57,7 +58,9 @@ def main(args: list[str]):
 
     credential = DefaultAzureCredential()
 
-    certificate_client = CertificateClient(vault_url=key_vault_url, credential=credential)
+    certificate_client = CertificateClient(
+        vault_url=key_vault_url, credential=credential
+    )
     key_client = KeyClient(vault_url=key_vault_url, credential=credential)
 
     certificate = certificate_client.get_certificate(certificate_name)
@@ -68,14 +71,15 @@ def main(args: list[str]):
 
     crypto_client = CryptographyClient(key, credential)
 
-    digest = sha256sum(path, 1024*1024, True)
+    digest = sha256sum(path, 1024 * 1024, True)
 
     with open(sigfile, "rb") as file:
-        signature=file.read()
+        signature = file.read()
 
     result = crypto_client.verify(SignatureAlgorithm.es256, digest, signature)
-    print ("Verification result: ", result.is_valid)
+    print("Verification result: ", result.is_valid)
     assert result.is_valid
 
+
 if __name__ == "__main__":
-    main(sys.argv[:])
+    main()
