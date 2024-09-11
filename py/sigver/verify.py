@@ -3,24 +3,20 @@
 
 import sys
 
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.certificates import CertificateClient
-from azure.keyvault.keys import KeyClient
-from azure.keyvault.keys.crypto import CryptographyClient, SignatureAlgorithm
-
 from sha256tree import sha256sum
+import requests
+import json
+import base64
 
-KEY_VAULT_URL = "https://ghaf-devenv-ca.vault.azure.net/"
-CERTIFICATE_NAME = "."
-
+CERTIFICATE_NAME="INT-Ghaf-Devenv-Common"
+url = "https://ghaf-devenv-microsign-aleksandrtserepo-app.azurewebsites.net/api/verify-signature"
 
 def show_help():
     print(f"Usage: {sys.argv[0]} [options] ")
     print()
     print("Options:")
     print("          --path=<path>             = Path to verify")
-    print("          --cert=<certname>         = Name of the certificate to be used")
-    print("          --keyvault=<keyvault url> = URL of the keyvault")
+    print("          --cert=<certname>         = (optional) Name of the certificate to be used")
     print("          --sigfile=<filename>      = Signature filename")
     print("")
     sys.exit(0)
@@ -29,7 +25,6 @@ def show_help():
 def main():
     args = sys.argv[:]
     path = "."
-    key_vault_url = KEY_VAULT_URL
     certificate_name = CERTIFICATE_NAME
     sigfile = "signature.bin"
 
@@ -44,9 +39,6 @@ def main():
         elif args[0].startswith("--cert="):
             args[0] = args[0].removeprefix("--cert=")
             certificate_name = args[0]
-        elif args[0].startswith("--keyvault="):
-            args[0] = args[0].removeprefix("--keyvault=")
-            key_vault_url = args[0]
         elif args[0].startswith("--sigfile="):
             args[0] = args[0].removeprefix("--sigfile=")
             sigfile = args[0]
@@ -56,29 +48,31 @@ def main():
 
         args.pop(0)
 
-    credential = DefaultAzureCredential()
-
-    certificate_client = CertificateClient(
-        vault_url=key_vault_url, credential=credential
-    )
-    key_client = KeyClient(vault_url=key_vault_url, credential=credential)
-
-    certificate = certificate_client.get_certificate(certificate_name)
-
-    print(certificate.name)
-
-    key = key_client.get_key(certificate_name)
-
-    crypto_client = CryptographyClient(key, credential)
-
-    digest = sha256sum(path, 1024 * 1024, True)
+    digest = base64.b64encode(sha256sum(path, 1024 * 1024, True)).decode('utf-8')
 
     with open(sigfile, "rb") as file:
-        signature = file.read()
+        sig = file.read()
 
-    result = crypto_client.verify(SignatureAlgorithm.es256, digest, signature)
-    print("Verification result: ", result.is_valid)
-    assert result.is_valid
+    signature = base64.b64encode(sig).decode('utf-8')
+
+    data = {
+        "certificateName": certificate_name, 
+        "Hash": digest,
+        "Signature": signature
+    }
+
+    headers = {"Content-Type": "application/json"}
+    print (json.dumps(data))
+
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(data))
+
+        if response.status_code == 200:
+            print("Signature verification result:", response.json())
+        else:
+            print(f"Error: {response.status_code}, Response: {response.text}")
+    except Exception as e:
+        print(f"An error occurred while making the request: {str(e)}")
 
 
 if __name__ == "__main__":
