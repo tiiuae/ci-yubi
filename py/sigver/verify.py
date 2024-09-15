@@ -1,17 +1,25 @@
 # SPDX-FileCopyrightText: 2023 Technology Innovation Institute (TII)
 # SPDX-License-Identifier: Apache-2.0
+""" Signature Verification Script """
+import argparse
 
 import sys
+import os
 
-from sha256tree import sha256sum
-import requests
 import json
 import base64
+import requests
 
+from sha256tree import sha256sum
+
+# Default certificate to be used if no argument is given
 CERTIFICATE_NAME="INT-Ghaf-Devenv-Common"
-url = "https://ghaf-devenv-microsign-aleksandrtserepo-app.azurewebsites.net/api/verify-signature"
+
+# Azure Function (verify-signature) URL
+URL = "https://ghaf-devenv-microsign-aleksandrtserepo-app.azurewebsites.net/api/verify-signature"
 
 def show_help():
+    """Show help messsage"""
     print(f"Usage: {sys.argv[0]} [options] ")
     print()
     print("Options:")
@@ -21,34 +29,28 @@ def show_help():
     print("")
     sys.exit(0)
 
-
 def main():
-    args = sys.argv[:]
+    """Send REST API request to VerifySignature Azure Function"""
     path = "."
     certificate_name = CERTIFICATE_NAME
     sigfile = "signature.bin"
 
-    args.pop(0)
+    parser = argparse.ArgumentParser(description="Parse arguments")
+    parser.add_argument("--path", default=".",
+                        help="Specify the path. Default is current directory.")
+    parser.add_argument("--cert", default=CERTIFICATE_NAME, help="Specify the certificate name.")
+    parser.add_argument("--sigfile", default="signature.bin", help="Specify the signature file.")
 
-    while args and args[0].startswith("--"):
-        if args[0] == "--help":
-            show_help()
-        if args[0].startswith("--path="):
-            args[0] = args[0].removeprefix("--path=")
-            path = args[0]
-        elif args[0].startswith("--cert="):
-            args[0] = args[0].removeprefix("--cert=")
-            certificate_name = args[0]
-        elif args[0].startswith("--sigfile="):
-            args[0] = args[0].removeprefix("--sigfile=")
-            sigfile = args[0]
-        else:
-            print(f"Invalid argument: {args[0]}", file=sys.stderr)
-            sys.exit(1)
+    args = parser.parse_args()
 
-        args.pop(0)
+    path=args.path
+    certificate_name = args.cert
+    sigfile = args.sigfile
 
     digest = base64.b64encode(sha256sum(path, 1024 * 1024, True)).decode('utf-8')
+    if os.path.getsize(sigfile) != 64:
+        print("Wrong signature size!")
+        return -3
 
     with open(sigfile, "rb") as file:
         sig = file.read()
@@ -65,15 +67,17 @@ def main():
     print (json.dumps(data))
 
     try:
-        response = requests.post(url, headers=headers, data=json.dumps(data))
+        response = requests.post(URL, headers=headers, data=json.dumps(data), timeout=20)
 
-        if response.status_code == 200:
-            print("Signature verification result:", response.json())
-        else:
+        if response.status_code != 200:
             print(f"Error: {response.status_code}, Response: {response.text}")
-    except Exception as e:
+            return -2
+        print("Signature verification result:", response.json())
+        return 0 if response.json().get('is_valid', False) else 1
+    except requests.exceptions.RequestException as e:
         print(f"An error occurred while making the request: {str(e)}")
+        return -2
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
