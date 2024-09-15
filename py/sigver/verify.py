@@ -3,6 +3,8 @@
 """ Signature Verification Script """
 import argparse
 
+import logging
+
 import sys
 import os
 
@@ -11,6 +13,9 @@ import base64
 import requests
 
 from sha256tree import sha256sum
+
+LOG = logging.getLogger(os.path.abspath(__file__))
+
 
 # Default certificate to be used if no argument is given
 CERTIFICATE_NAME="INT-Ghaf-Devenv-Common"
@@ -49,7 +54,7 @@ def main():
 
     digest = base64.b64encode(sha256sum(path, 1024 * 1024, True)).decode('utf-8')
     if os.path.getsize(sigfile) != 64:
-        print("Wrong signature size!")
+        LOG.info("Wrong signature size!")
         return -3
 
     with open(sigfile, "rb") as file:
@@ -64,18 +69,18 @@ def main():
     }
 
     headers = {"Content-Type": "application/json"}
-    print (json.dumps(data))
+    LOG.info (json.dumps(data))
 
     try:
         response = requests.post(URL, headers=headers, data=json.dumps(data), timeout=20)
 
         if response.status_code != 200:
-            print(f"Error: {response.status_code}, Response: {response.text}")
+            LOG.error("Error: %s, Response: %s", response.status_code, response.text)
             return -2
-        print("Signature verification result:", response.json())
+        LOG.error("Signature verification result: %s", response.json())
         return 0 if response.json().get('is_valid', False) else 1
     except requests.exceptions.RequestException as e:
-        print(f"An error occurred while making the request: {str(e)}")
+        LOG.error("An error occurred while making the request: %s", str(e))
         return -2
 
 
