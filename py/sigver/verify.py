@@ -22,7 +22,6 @@ LOG = logging.getLogger(os.path.abspath(__file__))
 CERTIFICATE_NAME="INT-Ghaf-Devenv-Common"
 
 # Azure Function (verify-signature) URL
-#URL = "https://ghaf-devenv-microsign-aleksandrtserepo-app.azurewebsites.net/api/verify-signature"
 URL = "https://ghaf-devenv-signverify.azurewebsites.net/api/verifysignature"
 
 def main():
@@ -54,7 +53,7 @@ def main():
     signature = base64.b64encode(sig).decode('utf-8')
 
     data = {
-        "certificateName": certificate_name, 
+        "certificateName": certificate_name,
         "Hash": digest,
         "Signature": signature
     }
@@ -70,7 +69,7 @@ def main():
             status_code=response.status_code
             if status_code!=200:
                 count -= 1
-                LOG.error("Error %i Response: %s", status_code, response.text)
+                LOG.error("Error %i Response text: '%s'", status_code, response.text)
                 time.sleep(3)
         if count<1:
             LOG.error("All requests failed! Give up.")
