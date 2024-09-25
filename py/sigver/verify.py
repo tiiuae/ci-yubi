@@ -7,6 +7,7 @@ import logging
 
 import sys
 import os
+import time
 
 import json
 import base64
@@ -21,18 +22,8 @@ LOG = logging.getLogger(os.path.abspath(__file__))
 CERTIFICATE_NAME="INT-Ghaf-Devenv-Common"
 
 # Azure Function (verify-signature) URL
-URL = "https://ghaf-devenv-microsign-aleksandrtserepo-app.azurewebsites.net/api/verify-signature"
-
-def show_help():
-    """Show help messsage"""
-    print(f"Usage: {sys.argv[0]} [options] ")
-    print()
-    print("Options:")
-    print("          --path=<path>             = Path to verify")
-    print("          --cert=<certname>         = (optional) Name of the certificate to be used")
-    print("          --sigfile=<filename>      = Signature filename")
-    print("")
-    sys.exit(0)
+#URL = "https://ghaf-devenv-microsign-aleksandrtserepo-app.azurewebsites.net/api/verify-signature"
+URL = "https://ghaf-devenv-signverify.azurewebsites.net/api/verifysignature"
 
 def main():
     """Send REST API request to VerifySignature Azure Function"""
@@ -72,11 +63,19 @@ def main():
     LOG.info (json.dumps(data))
 
     try:
-        response = requests.post(URL, headers=headers, data=json.dumps(data), timeout=20)
+        status_code=0
+        count = 3
+        while (status_code!=200 and count > 0):
+            response = requests.post(URL, headers=headers, data=json.dumps(data), timeout=20)
+            status_code=response.status_code
+            if status_code!=200:
+                count -= 1
+                LOG.error("Error %i Response: %s", status_code, response.text)
+                time.sleep(3)
+        if count<1:
+            LOG.error("All requests failed! Give up.")
+            return -5
 
-        if response.status_code != 200:
-            LOG.error("Error: %s, Response: %s", response.status_code, response.text)
-            return -2
         LOG.error("Signature verification result: %s", response.json())
         return 0 if response.json().get('is_valid', False) else 1
     except requests.exceptions.RequestException as e:
