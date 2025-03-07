@@ -1,0 +1,48 @@
+FROM ubuntu:20.04
+
+WORKDIR /app
+RUN mkdir /etc/nitrokey
+COPY p11nethsm.conf /etc/nitrokey/p11nethsm.conf
+COPY openssl.cnf /etc/nitrokey/openssl.cnf
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
+    echo "Etc/UTC" > /etc/timezone && \
+    apt-get update && \
+    apt-get install -y tzdata python3.8-venv curl
+
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    git wget iputils-ping pipx vim gdb \
+    pkgconf libssl-dev gnutls-bin \
+    opensc libengine-pkcs11-openssl \
+    build-essential
+
+
+# We need to rebuild the libnethsm_pkcs11.so to run on this Docker
+# So, install Rust toolchain, clone the source and build
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+RUN mkdir /app/addons
+RUN cd /app/addons; git clone https://github.com/Nitrokey/nethsm-pkcs11.git
+RUN . $HOME/.cargo/env; cd /app/addons/nethsm-pkcs11; cargo build --release
+RUN cp /app/addons/nethsm-pkcs11/target/release/libnethsm_pkcs11.so /usr/lib/x86_64-linux-gnu/pkcs11/libnethsm_pkcs11.so
+
+# Install nitropy
+RUN DEBIAN_FRONTEND=noninteractive pipx install pynitrokey
+
+# Install sbsigntool
+RUN DEBIAN_FRONTEND=noninteractive apt-get install sbsigntool
+
+# Add Aliases and ENV vars
+RUN echo "export PATH=$PATH:/root/.local/bin" >> ~/.bashrc
+RUN echo "alias np='nitropy nethsm --no-verify-tls --host ppclabz.net:8443'" >> ~/.bashrc
+RUN echo "alias p='pkcs11-tool --module /usr/lib/x86_64-linux-gnu/pkcs11/libnethsm_pkcs11.so --login --login-type so --so-pin Administrator'" >> ~/.bashrc
+RUN echo "alias pd='RUST_LOG=debug pkcs11-tool --module /usr/lib/x86_64-linux-gnu/pkcs11/libnethsm_pkcs11.so --login --login-type so --so-pin Administrator'" >> ~/.bashrc
+RUN echo "alias openssl='OPENSSL_CONF=/etc/nitrokey/openssl.cnf openssl'" >> ~/.bashrc
+RUN echo "export P11NETHSM_CONFIG_FILE=/etc/nitrokey/p11nethsm.conf" >> ~/.bashrc
+RUN echo "export OPENSSL_CONF=/etc/nitrokey/openssl.cnf" >> ~/.bashrc
+
+# Extras:
+
+RUN git clone https://github.com/tiiuae/scs-pki-research.git
