@@ -1,59 +1,99 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"
+}
+
+err_report() {
+    log "[!] Error on line $1"
+    exit 1
+}
+trap 'err_report $LINENO' ERR
+
+# Input and constants
+if [[ $# -ne 1 ]]; then
+    log "[!] Usage: $0 <disk-image.zst>"
+    exit 1
+fi
+
 DISK_IMAGE_ZST="$1"
 DISK_IMAGE="disk.raw"
 EFI_IMAGE="efi-partition.img"
 SIGNED_EFI="BOOTX64.EFI.signed"
 CERT="uefi-signing-cert.pem"
 KEY="vault:ghaf-secureboot-testkv:uefi-signing-key"
-
 REPO="harbor.ppclabz.net/ghaf-secboot/ghaf-uefi"
 TAG="signed"
 ZSTD_IMAGE="ghaf_0.0.1.raw.zst"
 
-oras login harbor.ppclabz.net -u "$ORAS_USERNAME" -p "$ORAS_PASSWORD"
+# Ensure required tools are available
+for cmd in zstd fdisk dd mcopy sbsign oras; do
+    if ! command -v "$cmd" &>/dev/null; then
+        log "[!] Required tool '$cmd' not found in PATH"
+        exit 1
+    fi
+done
 
-rm -rf $DISK_IMAGE $SIGNED_EFI BOOTX64.EFI
+# Jenkins global credentials / Jenkins secrets are used for now
+# TODO: Consider more secure approach
+if [[ -z "${ORAS_USERNAME:-}" || -z "${ORAS_PASSWORD:-}" ]]; then
+    log "[!] ORAS_USERNAME and ORAS_PASSWORD must be set"
+    exit 1
+fi
 
-echo "[*] Decompressing image..."
+log "[*] Cleaning up any previous artifacts..."
+rm -f "$DISK_IMAGE" "$EFI_IMAGE" "$SIGNED_EFI" BOOTX64.EFI
+
+log "[*] Decompressing image: $DISK_IMAGE_ZST -> $DISK_IMAGE"
 zstd -d "$DISK_IMAGE_ZST" -o "$DISK_IMAGE"
 chmod 666 "$DISK_IMAGE"
 
-echo "[*] Locating EFI partition offset and size..."
-read EFI_START SECTORS <<<$(fdisk -l "$DISK_IMAGE" | awk '$0 ~ /EFI System/ { print $2, $4 }')
-if [[ -z "$EFI_START" || -z "$SECTORS" ]]; then
-  echo "[!] Could not determine EFI partition info"
-  exit 1
+log "[*] Locating EFI partition offset and size..."
+read -r EFI_START SECTORS < <(fdisk -l "$DISK_IMAGE" | awk '$0 ~ /EFI System/ { print $2, $4 }')
+if [[ -z "${EFI_START:-}" || -z "${SECTORS:-}" ]]; then
+    log "[!] Could not determine EFI partition info from image"
+    exit 1
 fi
 
 EFI_OFFSET=$((EFI_START * 512))
 EFI_SIZE=$((SECTORS * 512))
-echo "[*] EFI offset: $EFI_OFFSET, size: $EFI_SIZE bytes"
+log "[*] EFI offset: $EFI_OFFSET, size: $EFI_SIZE bytes"
 
-echo "[*] Extracting EFI partition..."
+log "[*] Extracting EFI partition to $EFI_IMAGE..."
 dd if="$DISK_IMAGE" of="$EFI_IMAGE" bs=512 skip="$EFI_START" count="$SECTORS" status=none
 
-echo "[*] Extracting BOOTX64.EFI..."
-mcopy -i "$EFI_IMAGE" ::EFI/BOOT/BOOTX64.EFI BOOTX64.EFI
+log "[*] Extracting BOOTX64.EFI..."
+if ! mcopy -i "$EFI_IMAGE" ::EFI/BOOT/BOOTX64.EFI BOOTX64.EFI; then
+    log "[!] Failed to extract BOOTX64.EFI from EFI image"
+    exit 1
+fi
 
-echo "[*] Signing BOOTX64.EFI..."
-/bin/sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$SIGNED_EFI" BOOTX64.EFI
+log "[*] Signing BOOTX64.EFI..."
+if ! /bin/sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$SIGNED_EFI" BOOTX64.EFI; then
+    log "[!] Failed to sign BOOTX64.EFI"
+    exit 1
+fi
 
-echo "[*] Inserting signed BOOTX64.EFI into EFI image..."
-mcopy -o -i "$EFI_IMAGE" "$SIGNED_EFI" ::EFI/BOOT/BOOTX64.EFI
+log "[*] Inserting signed BOOTX64.EFI back into EFI image..."
+if ! mcopy -o -i "$EFI_IMAGE" "$SIGNED_EFI" ::EFI/BOOT/BOOTX64.EFI; then
+    log "[!] Failed to insert signed BOOTX64.EFI"
+    exit 1
+fi
 
-echo "[*] Writing EFI partition back to disk image..."
+log "[*] Writing updated EFI partition back to disk image..."
 dd if="$EFI_IMAGE" of="$DISK_IMAGE" bs=512 seek="$EFI_START" conv=notrunc status=none
 
-echo "[+] Signed image is in $DISK_IMAGE"
+log "[+] Signed image is ready in $DISK_IMAGE"
 
-# Define repo details
+SIGNED_ZST="signed_$ZSTD_IMAGE"
+log "[*] Recompressing signed image to $SIGNED_ZST..."
+zstd -f "$DISK_IMAGE" -o "$SIGNED_ZST"
 
-echo "[*] Recompressing image to signed_$ZSTD_IMAGE..."
-zstd -f disk.raw -o "signed_$ZSTD_IMAGE"
+log "[*] Logging into OCI registry..."
+oras login harbor.ppclabz.net -u "$ORAS_USERNAME" -p "$ORAS_PASSWORD"
 
-echo "[*] Pushing image to OCI registry using oras..."
-oras push "$REPO:$TAG" "$ZSTD_IMAGE:application/octet-stream"
+log "[*] Pushing $SIGNED_ZST to OCI registry as $REPO:$TAG..."
+oras push "$REPO:$TAG" "$SIGNED_ZST:application/octet-stream"
 
-echo "[+] Done. Image uploaded as $REPO:$TAG"
+log "[+] Success! Image uploaded as $REPO:$TAG"
