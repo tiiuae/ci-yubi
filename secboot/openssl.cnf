@@ -1,0 +1,15 @@
+openssl_conf = openssl_init
+
+[openssl_init]
+engines = engine_section
+
+[engine_section]
+e_akv = e_akv_section
+
+[e_akv_section]
+engine_id = e_akv
+dynamic_path = /var/lib/jenkins/workspace/GhafSB-test/e_akv.so
+init = 1
+
+VERBOSE = 3
+DEBUG_LEVEL = 3
