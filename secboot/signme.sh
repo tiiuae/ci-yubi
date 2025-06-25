@@ -27,6 +27,21 @@ REPO="harbor.ppclabz.net/ghaf-secboot/ghaf-uefi"
 TAG="signed"
 ZSTD_IMAGE="ghaf_0.0.1.raw.zst"
 
+case "$1" in
+    *.iso)
+	input_type="iso"
+	log "ISO Image detected"
+	;;
+    *.zst)
+	input_type="zst"
+	log "ZST'ed Image detected"
+	;;
+    *)
+	log "Unsupported input file: $1" >&2
+	exit 1
+	;;
+esac
+
 # Ensure required tools are available
 for cmd in zstd fdisk dd mcopy sbsign oras; do
     if ! command -v "$cmd" &>/dev/null; then
@@ -45,12 +60,16 @@ fi
 log "[*] Cleaning up any previous artifacts..."
 rm -f "$DISK_IMAGE" "$EFI_IMAGE" "$SIGNED_EFI" BOOTX64.EFI
 
-log "[*] Decompressing image: $DISK_IMAGE_ZST -> $DISK_IMAGE"
-zstd -d "$DISK_IMAGE_ZST" -o "$DISK_IMAGE"
+if [[ "$input_type" == "zst" ]]; then
+    log "[*] Decompressing image: $DISK_IMAGE_ZST -> $DISK_IMAGE"
+    zstd -d "$DISK_IMAGE_ZST" -o "$DISK_IMAGE"
+else
+    DISK_IMAGE=$DISK_IMAGE_ZST
+fi
 chmod 666 "$DISK_IMAGE"
 
 log "[*] Locating EFI partition offset and size..."
-read -r EFI_START SECTORS < <(fdisk -l "$DISK_IMAGE" | awk '$0 ~ /EFI System/ { print $2, $4 }')
+read -r EFI_START SECTORS < <(fdisk -l "$DISK_IMAGE" | awk '$0 ~ /EFI / { print $2, $4 }')
 if [[ -z "${EFI_START:-}" || -z "${SECTORS:-}" ]]; then
     log "[!] Could not determine EFI partition info from image"
     exit 1
@@ -70,7 +89,7 @@ if ! mcopy -i "$EFI_IMAGE" ::EFI/BOOT/BOOTX64.EFI BOOTX64.EFI; then
 fi
 
 log "[*] Signing BOOTX64.EFI..."
-if ! /bin/sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$SIGNED_EFI" BOOTX64.EFI; then
+if ! sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$SIGNED_EFI" BOOTX64.EFI; then
     log "[!] Failed to sign BOOTX64.EFI"
     exit 1
 fi

@@ -7,6 +7,9 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+
+    sbsigntools.url = "github:tiiuae/sbsigntools";
+    akvengine.url = "github:tiiuae/AzureKeyVaultManagedHSMEngine";
   };
 
   outputs =
@@ -15,6 +18,9 @@
       self,
       nixpkgs,
       flake-utils,
+      sbsigntools,
+      akvengine,
+      ...
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
@@ -34,6 +40,34 @@
           src = pkgs.lib.cleanSource ./py/sigver;
           propagatedBuildInputs = pythonDependencies;
         };
+
+	sbsignPkg = sbsigntools.packages.${system}.default;
+	akvenginePkg = akvengine.packages.${system}.default;
+
+	signmeScript = pkgs.writeShellScriptBin "signme" ''
+
+	  set -euo pipefail
+
+	  tmpconf=$(mktemp)
+	  cat > "$tmpconf" <<EOF
+ openssl_conf = openssl_init
+
+ [openssl_init]
+ engines = engine_section
+
+ [engine_section]
+ akv = akv_section
+
+ [akv_section]
+ engine_id = akv
+ dynamic_path = ${akvenginePkg}/lib/engines-3/e_akv.so
+ init = 1
+EOF
+
+	  export OPENSSL_CONF="$tmpconf"
+	  export PATH="${sbsignPkg}/bin:${akvenginePkg}/bin:$PATH"
+	  exec ${./secboot/signme.sh} "$@"
+	'';
       in
       {
         devShells.default = pkgs.mkShell {
@@ -55,6 +89,11 @@
             type = "app";
             program = "${sigver}/bin/verify";
           };
+
+	  signme = {
+	    type = "app";
+	    program = "${signmeScript}/bin/signme";
+	  };
         };
       }
     );
