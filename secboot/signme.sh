@@ -32,7 +32,7 @@ log "[DEBUG] cert: $1"
 log "[DEBUG] image: $2"
 log "[DEBUG] $# args remaining"
 
-case "$1" in
+case "$DISK_IMAGE_ZST" in
     *.iso)
 	input_type="iso"
 	log "ISO Image detected"
