@@ -49,6 +49,7 @@
 	  runtimeInputs = [
 	    pkgs.util-linux     # for fdisk, losetup, etc.
 	    pkgs.mtools
+	    pkgs.gawk
 	    sbsignPkg           # from flake input
     	    akvenginePkg        # from flake input
   	];
