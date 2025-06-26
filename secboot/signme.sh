@@ -66,7 +66,8 @@ if [[ "$input_type" == "zst" ]]; then
 else
     DISK_IMAGE=$DISK_IMAGE_ZST
 fi
-chmod 666 "$DISK_IMAGE"
+log "[*] Disk image: $DISK_IMAGE"
+#chmod 666 "$DISK_IMAGE"
 
 log "[*] Locating EFI partition offset and size..."
 read -r EFI_START SECTORS < <(fdisk -l "$DISK_IMAGE" | awk '$0 ~ /EFI / { print $2, $4 }')
