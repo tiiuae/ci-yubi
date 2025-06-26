@@ -36,7 +36,6 @@ export AZURE_CLI_ACCESS_TOKEN=$(curl -s \
 log "[DEBUG] cert: $1"
 log "[DEBUG] image: $2"
 log "[DEBUG] $# args remaining"
-log "[DEBUG] $AZURE_CLI_ACCESS_TOKEN"
 
 case "$DISK_IMAGE_ZST" in
     *.iso)
@@ -102,7 +101,6 @@ if ! mcopy -i "$EFI_IMAGE" ::EFI/BOOT/BOOTX64.EFI BOOTX64.EFI; then
 fi
 
 log "[*] Signing BOOTX64.EFI..."
-#sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$SIGNED_EFI" BOOTX64.EFI
 
 log "[DEBUG] Running: sbsign --engine e_akv --keyform engine --key \"$KEY\" --cert \"$CERT\" --output \"$SIGNED_EFI\" BOOTX64.EFI"
 sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$SIGNED_EFI" BOOTX64.EFI 2>&1 | tee /tmp/sbsign.log
@@ -112,12 +110,6 @@ if [[ $ret -ne 0 ]]; then
     cat /tmp/sbsign.log
     exit $ret
 fi
-
-
-#if ! sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$SIGNED_EFI" BOOTX64.EFI; then
-#    log "[!] Failed to sign BOOTX64.EFI"
-#    exit 1
-#fi
 
 log "[*] Inserting signed BOOTX64.EFI back into EFI image..."
 if ! mcopy -o -i "$EFI_IMAGE" "$SIGNED_EFI" ::EFI/BOOT/BOOTX64.EFI; then
@@ -130,9 +122,11 @@ dd if="$EFI_IMAGE" of="$DISK_IMAGE" bs=512 seek="$EFI_START" conv=notrunc status
 
 log "[+] Signed image is ready in $DISK_IMAGE"
 
-SIGNED_ZST="signed_$ZSTD_IMAGE"
-log "[*] Recompressing signed image to $SIGNED_ZST..."
-zstd -f "$DISK_IMAGE" -o "$SIGNED_ZST"
+if [[ "$input_type" == "zst" ]]; then
+    SIGNED_ZST="signed_$ZSTD_IMAGE"
+    log "[*] Recompressing signed image to $SIGNED_ZST..."
+    zstd -f "$DISK_IMAGE" -o "$SIGNED_ZST"
+fi
 
 #log "[*] Logging into OCI registry..."
 #oras login harbor.ppclabz.net -u "$ORAS_USERNAME" -p "$ORAS_PASSWORD"
