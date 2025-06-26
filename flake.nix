@@ -65,7 +65,7 @@
 EOF
 
 	  export OPENSSL_CONF="$tmpconf"
-	  export PATH="${sbsignPkg}/bin:${akvenginePkg}/bin:$PATH"
+	  export PATH="${sbsignPkg}/bin:${akvenginePkg}/bin:${pkgs.util-linux}/bin:$PATH"
 	  exec ${./secboot/signme.sh} "$@"
 	'';
       in
