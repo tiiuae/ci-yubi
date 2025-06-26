@@ -44,30 +44,38 @@
 	sbsignPkg = sbsigntools.packages.${system}.default;
 	akvenginePkg = akvengine.packages.${system}.default;
 
-	signmeScript = pkgs.writeShellScriptBin "signme" ''
+	signmeScript = pkgs.writeShellApplication {
+	  name = "signme";
+	  runtimeInputs = [
+	    pkgs.util-linux     # for fdisk, losetup, etc.
+	    sbsignPkg           # from flake input
+    	    akvenginePkg        # from flake input
+  	];
 
-	  set -euo pipefail
+	text = ''
+    	  set -euo pipefail
 
-	  tmpconf=$(mktemp)
-	  cat > "$tmpconf" <<EOF
- openssl_conf = openssl_init
+    	  tmpconf=$(mktemp)
+    	  cat > "$tmpconf" <<EOF
+openssl_conf = openssl_init
 
- [openssl_init]
- engines = engine_section
+[openssl_init]
+engines = engine_section
 
- [engine_section]
- akv = akv_section
+[engine_section]
+akv = akv_section
 
- [akv_section]
- engine_id = akv
- dynamic_path = ${akvenginePkg}/lib/engines-3/e_akv.so
- init = 1
+[akv_section]
+engine_id = akv
+dynamic_path = ${akvenginePkg}/lib/engines-3/e_akv.so
+init = 1
 EOF
 
-	  export OPENSSL_CONF="$tmpconf"
-	  export PATH="${sbsignPkg}/bin:${akvenginePkg}/bin:${pkgs.util-linux}/bin:$PATH"
-	  exec ${./secboot/signme.sh} "$@"
-	'';
+    export OPENSSL_CONF="$tmpconf"
+    exec ${./secboot/signme.sh} "$@"
+  '';
+};
+
       in
       {
         devShells.default = pkgs.mkShell {
