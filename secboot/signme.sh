@@ -13,16 +13,16 @@ trap 'err_report $LINENO' ERR
 
 # Input and constants
 if [[ $# -ne 1 ]]; then
-    log "[!] Usage: $0 <disk-image.zst>"
+    log "[!] Usage: $0 <certificate> <disk-image.zst>"
     exit 1
 fi
 
-DISK_IMAGE_ZST="$1"
+DISK_IMAGE_ZST="$2"
 DISK_IMAGE="disk.raw"
 DISK_IMAGE_ISO="disk.iso"
 EFI_IMAGE="efi-partition.img"
 SIGNED_EFI="BOOTX64.EFI.signed"
-CERT="uefi-signing-cert.pem"
+CERT="$1"
 KEY="vault:ghaf-secureboot-testkv:uefi-signing-key"
 REPO="harbor.ppclabz.net/ghaf-secboot/ghaf-uefi"
 TAG="signed"

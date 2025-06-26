@@ -74,7 +74,7 @@ init = 1
 EOF
 
     export OPENSSL_CONF="$tmpconf"
-    exec ${./secboot/signme.sh} "$@"
+    exec ${./secboot/signme.sh} ${./secboot/uefi-signing-cert.pem} "$@"
   '';
 };
 
