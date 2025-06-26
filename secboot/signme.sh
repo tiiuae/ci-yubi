@@ -19,6 +19,7 @@ fi
 
 DISK_IMAGE_ZST="$1"
 DISK_IMAGE="disk.raw"
+DISK_IMAGE_ISO="disk.iso"
 EFI_IMAGE="efi-partition.img"
 SIGNED_EFI="BOOTX64.EFI.signed"
 CERT="uefi-signing-cert.pem"
@@ -64,10 +65,11 @@ if [[ "$input_type" == "zst" ]]; then
     log "[*] Decompressing image: $DISK_IMAGE_ZST -> $DISK_IMAGE"
     zstd -d "$DISK_IMAGE_ZST" -o "$DISK_IMAGE"
 else
-    DISK_IMAGE=$DISK_IMAGE_ZST
+    cp $DISK_IMAGE_ZST $DISK_IMAGE_ISO
+    DISK_IMAGE=$DISK_IMAGE_ISO
 fi
 log "[*] Disk image: $DISK_IMAGE"
-#chmod 666 "$DISK_IMAGE"
+chmod 666 "$DISK_IMAGE"
 
 log "[*] Locating EFI partition offset and size..."
 read -r EFI_START SECTORS < <(fdisk -l "$DISK_IMAGE" | awk '$0 ~ /EFI / { print $2, $4 }')
