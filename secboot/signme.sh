@@ -28,9 +28,15 @@ REPO="harbor.ppclabz.net/ghaf-secboot/ghaf-uefi"
 TAG="signed"
 ZSTD_IMAGE="ghaf_0.0.1.raw.zst"
 
+export AZURE_CLI_ACCESS_TOKEN=$(curl -s \
+  'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://vault.azure.net' \
+  -H "Metadata: true" | jq -r .access_token)
+
+
 log "[DEBUG] cert: $1"
 log "[DEBUG] image: $2"
 log "[DEBUG] $# args remaining"
+log "[DEBUG] $AZURE_CLI_ACCESS_TOKEN"
 
 case "$DISK_IMAGE_ZST" in
     *.iso)
