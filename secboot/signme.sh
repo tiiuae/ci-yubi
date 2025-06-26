@@ -12,7 +12,7 @@ err_report() {
 trap 'err_report $LINENO' ERR
 
 # Input and constants
-if [[ $# -ne 1 ]]; then
+if [[ $# -ne 2 ]]; then
     log "[!] Usage: $0 <certificate> <disk-image.zst>"
     exit 1
 fi
@@ -27,6 +27,10 @@ KEY="vault:ghaf-secureboot-testkv:uefi-signing-key"
 REPO="harbor.ppclabz.net/ghaf-secboot/ghaf-uefi"
 TAG="signed"
 ZSTD_IMAGE="ghaf_0.0.1.raw.zst"
+
+log "[DEBUG] cert: $1"
+log "[DEBUG] image: $2"
+log "[DEBUG] $# args remaining"
 
 case "$1" in
     *.iso)
