@@ -48,6 +48,7 @@
 	  name = "signme";
 	  runtimeInputs = [
 	    pkgs.util-linux     # for fdisk, losetup, etc.
+	    pkgs.mtools
 	    sbsignPkg           # from flake input
     	    akvenginePkg        # from flake input
   	];
