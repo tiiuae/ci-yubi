@@ -96,7 +96,18 @@ if ! mcopy -i "$EFI_IMAGE" ::EFI/BOOT/BOOTX64.EFI BOOTX64.EFI; then
 fi
 
 log "[*] Signing BOOTX64.EFI..."
-sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$SIGNED_EFI" BOOTX64.EFI
+#sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$SIGNED_EFI" BOOTX64.EFI
+
+log "[DEBUG] Running: sbsign --engine e_akv --keyform engine --key \"$KEY\" --cert \"$CERT\" --output \"$SIGNED_EFI\" BOOTX64.EFI"
+sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$SIGNED_EFI" BOOTX64.EFI 2>&1 | tee /tmp/sbsign.log
+ret=$?
+if [[ $ret -ne 0 ]]; then
+    log "[!] sbsign failed (exit code $ret)"
+    cat /tmp/sbsign.log
+    exit $ret
+fi
+
+
 #if ! sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$SIGNED_EFI" BOOTX64.EFI; then
 #    log "[!] Failed to sign BOOTX64.EFI"
 #    exit 1
