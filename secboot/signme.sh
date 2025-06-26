@@ -43,7 +43,7 @@ case "$1" in
 esac
 
 # Ensure required tools are available
-for cmd in zstd fdisk dd mcopy sbsign oras; do
+for cmd in zstd fdisk dd mcopy sbsign; do
     if ! command -v "$cmd" &>/dev/null; then
         log "[!] Required tool '$cmd' not found in PATH"
         exit 1
@@ -52,10 +52,10 @@ done
 
 # Jenkins global credentials / Jenkins secrets are used for now
 # TODO: Consider more secure approach
-if [[ -z "${ORAS_USERNAME:-}" || -z "${ORAS_PASSWORD:-}" ]]; then
-    log "[!] ORAS_USERNAME and ORAS_PASSWORD must be set"
-    exit 1
-fi
+#if [[ -z "${ORAS_USERNAME:-}" || -z "${ORAS_PASSWORD:-}" ]]; then
+#    log "[!] ORAS_USERNAME and ORAS_PASSWORD must be set"
+#    exit 1
+#fi
 
 log "[*] Cleaning up any previous artifacts..."
 rm -f "$DISK_IMAGE" "$EFI_IMAGE" "$SIGNED_EFI" BOOTX64.EFI
@@ -109,10 +109,11 @@ SIGNED_ZST="signed_$ZSTD_IMAGE"
 log "[*] Recompressing signed image to $SIGNED_ZST..."
 zstd -f "$DISK_IMAGE" -o "$SIGNED_ZST"
 
-log "[*] Logging into OCI registry..."
-oras login harbor.ppclabz.net -u "$ORAS_USERNAME" -p "$ORAS_PASSWORD"
+#log "[*] Logging into OCI registry..."
+#oras login harbor.ppclabz.net -u "$ORAS_USERNAME" -p "$ORAS_PASSWORD"
 
-log "[*] Pushing $SIGNED_ZST to OCI registry as $REPO:$TAG..."
-oras push "$REPO:$TAG" "$SIGNED_ZST:application/octet-stream"
+#log "[*] Pushing $SIGNED_ZST to OCI registry as $REPO:$TAG..."
+#oras push "$REPO:$TAG" "$SIGNED_ZST:application/octet-stream"
 
-log "[+] Success! Image uploaded as $REPO:$TAG"
+#log "[+] Success! Image uploaded as $REPO:$TAG"
+log "[+] EFI Signing Success!"
