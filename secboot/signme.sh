@@ -127,6 +127,8 @@ if [[ "$input_type" == "zst" ]]; then
     SIGNED_ZST="signed_$ZSTD_IMAGE"
     log "[*] Recompressing signed image to $SIGNED_ZST..."
     zstd -f "$DISK_IMAGE" -o "$SIGNED_ZST"
+    mkdir -p $SUBDIR
+    mv $SIGNED_ZST $SUBDIR
 else
     log "[*] Move signed image back to $SUBDIR"
     mkdir -p $SUBDIR
