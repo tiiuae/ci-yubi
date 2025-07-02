@@ -147,3 +147,28 @@ dd if=efi-partition.img of=disk.raw bs=512 seek="$EFI_START" conv=notrunc status
 
 After this you should have an image with signed UKI in disk.raw.
 
+Please save your PK, KEK, and DB files in DER format on a FAT32-formatted USB drive. Then reboot your target test machine and press F1 during startup to enter the BIOS setup.
+
+## Provisioning (Enrolling) Secure Boot Keys / Certificates
+
+In BIOS:
+
+Clean all the previous keys first:
+
+Navigate to: Security -> Secure Boot
+ -> Clear All Secure Boot Keys
+
+Provision the new keys one by one:
+
+Navigate to: Security -> Secure Boot -> Key Management
+ -> Authorized Signature Database (DB) -> Enroll DB -> Choose your USB media from the list and click on db.der
+ -> Key Exchange Key (KEK) -> Enroll KEK -> Choose your USB media from the list and click on kek.der
+ -> Platform Key (PK) -> Enroll PK -> Choose your USB media from the list and click on pk.der
+
+After PK is engrolled, the Secure Boot Mode should automatically set to User Mode.
+
+Now you can enable Secure Boot:
+Navigate to: Security -> Secure Boot and Enable it.
+
+From this moment only the images signed with private key of DB keypair will boot.
+Booting any other images should produce an error about signature issue.
