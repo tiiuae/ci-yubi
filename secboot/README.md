@@ -43,7 +43,7 @@ The manual testing method relies on locally created keys and doesn't require net
 
 #### Create Key Hierarchy
 
-`
+```sh
 #!/bin/bash
 set -e
 
@@ -70,15 +70,15 @@ openssl req -new -key db.key -out db.csr -config create_DB_cert.ini
 
 # Sign DB CSR with KEK
 openssl x509 -req -in db.csr -CA kek.crt -CAkey kek.key -CAcreateserial -out db.crt -days 3650 -extfile sign_DB_csr.ini -extensions v3_req
-`
+```
 
 #### Convert certificates to DER format (required by UEFI)
 
-`
+```sh
 openssl x509 -in pk.crt  -outform DER -out pk.der
 openssl x509 -in kek.crt -outform DER -out kek.der
 openssl x509 -in db.crt  -outform DER -out db.der
-`
+```
 
 At this stage, you should have everything required to sign the image and enable secure boot on X1 Carbon laptop.
 
@@ -97,12 +97,12 @@ Extract the raw image from zstd archive:
 
 Find EFI partition offset, size and extract EFI partition
 
-`
+```sh
 read -r EFI_START SECTORS < <(fdisk -l disk.raw | awk '$0 ~ /EFI / { print $2, $4 }')
 EFI_OFFSET=$((EFI_START * 512))
 EFI_SIZE=$((SECTORS * 512))
 dd if=disk.raw of=efi-partition.img bs=512 skip="$EFI_START" count="$SECTORS" status=none
-`
+```
 
 Extract BOOTX64.EFI
 
@@ -113,8 +113,10 @@ mcopy -i efi-partition.img ::EFI/BOOT/BOOTX64.EFI BOOTX64.EFI
 Please note, that hardened images include UKI (Unified Kernel Image) by default. If you are willing to sign unhardened image, you would need to create UKI and replace BOOTX64.EFI on EFI partition with it. In case you are working with hardened image, please skip the following step:
 
 TODO: Add a paragraph on bzImage and initrd extraction from the raw image!!!
+TODO: Add a paragraph on ukify with offline keys
 
-`
+
+```sh
 ukify build   \
 --linux ../gficvxrnx7h89ydhih3cry080174dw2q-linux-6.13.3-bzImage.efi   \
 --initrd ../hr7djwyl44qm53hbrd91xa9s77hjbhxc-initrd-linux-6.13.3-initrd.efi   \
@@ -125,10 +127,12 @@ ukify build   \
 --secureboot-private-key "pkcs11:model=NetHSM;manufacturer=Nitrokey%20GmbH;serial=unknown;token=LocalHSM;id=%64%62;object=db;type=private"   \
 --secureboot-certificate /mnt/test/ghaf-secboot/ca/config/db.crt   \
 --output BOOTX64.EFI
-`
+```
 
 
 Sign it with DB private key
+
+(NOTE: if you have created UKI, this step is not needed, as the UKI image is signed by ukify)
 
 `
 nix run github:tiiuae/sbsigntools -- --keyform PEM --key db.key --cert db.crt --output signed.efi BOOTX64.EFI
@@ -136,9 +140,10 @@ nix run github:tiiuae/sbsigntools -- --keyform PEM --key db.key --cert db.crt --
 
 Insert signed BOOTX64.EFI back into EFI image and update EFI partition on the disk image.
 
-`
+```sh
 mcopy -o -i "$EFI_IMAGE" "$SIGNED_EFI" ::EFI/BOOT/BOOTX64.EFI
 dd if=efi-partition.img of=disk.raw bs=512 seek="$EFI_START" conv=notrunc status=none
-`
+```
 
 After this you should have an image with signed UKI in disk.raw.
+
