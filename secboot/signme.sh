@@ -14,6 +14,8 @@ trap 'err_report $LINENO' ERR
 # Input and constants
 if [[ $# -ne 3 ]]; then
     log "[!] Usage: $0 <certificate> <disk-image.zst> <subdir>"
+    log "[!] Please make sure AZURE_CLI_ACCESS_TOKEN variable is set before running."
+    log "[!] ... or az login first."
     exit 1
 fi
 
@@ -29,9 +31,11 @@ REPO="harbor.ppclabz.net/ghaf-secboot/ghaf-uefi"
 TAG="signed"
 ZSTD_IMAGE="ghaf_0.0.1.raw.zst"
 
-export AZURE_CLI_ACCESS_TOKEN=$(curl -s \
-  'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://vault.azure.net' \
-  -H "Metadata: true" | jq -r .access_token)
+if [ -z "$AZURE_CLI_ACCESS_TOKEN" ]; then
+    export AZURE_CLI_ACCESS_TOKEN=$(curl -s \
+     'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://vault.azure.net' \
+     -H "Metadata: true" | jq -r .access_token)
+fi
 
 
 log "[DEBUG] cert: $1"
