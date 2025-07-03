@@ -14,7 +14,7 @@ WORKDIR=$(mktemp -d)
 echo "[*] Workdir: $WORKDIR"
 
 # === EXTRACT ISO ===
-echo "[*] Extracting ISO filesystem..."
+echo "[*] Extracting ISO filesystem... from $ISO"
 xorriso -osirrox on -indev "$ISO" -extract / "$WORKDIR/iso_root"
 
 echo "[*] Fixing ownership of ISO tree..."
@@ -76,5 +76,5 @@ xorriso -as mkisofs \
       -no-emul-boot -isohybrid-gpt-basdat \
     -o "$FINAL_ISO" "$WORKDIR/iso_root"
 
-echo "[*] ✅ New signed ISO created: $FINAL_ISO"
-echo "[*] ✅ All done."
+echo "[*] New signed ISO created: $FINAL_ISO"
+echo "[*] All done."
