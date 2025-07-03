@@ -52,6 +52,7 @@
 	    pkgs.gawk
 	    sbsignPkg           # from flake input
     	    akvenginePkg        # from flake input
+	    xorriso
   	];
 
 	text = ''
