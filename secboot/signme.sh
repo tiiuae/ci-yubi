@@ -46,7 +46,8 @@ case "$DISK_IMAGE_ZST" in
     *.iso)
 	input_type="iso"
 	log "ISO Image detected"
-	./signiso.sh $2
+	lof "PWD: $PWD"
+	./secboot/signiso.sh $2
 	exit 0
 	;;
     *.zst)
