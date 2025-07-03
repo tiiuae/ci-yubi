@@ -53,6 +53,7 @@
 	    sbsignPkg           # from flake input
     	    akvenginePkg        # from flake input
 	    pkgs.xorriso
+	    pkgs.systemdUkify
   	];
 
 	text = ''
