@@ -42,7 +42,7 @@ echo "[*] Signing UKI..."
 #sbsign --key db.key --cert db.crt \
 #    --output "$WORKDIR/$SIGNED_UKI" "$WORKDIR/BOOTX64.EFI"
 #cp ../$SIGNED_UKI $WORKDIR/$SIGNED_UKI
-log "[DEBUG] Running: sbsign --engine e_akv --keyform engine --key \"$KEY\" --cert \"$CERT\" --output \"$SIGNED_EFI\" BOOTX64.EFI"
+log "[DEBUG] Running: sbsign with params --key \"$KEY\" --cert \"$CERT\" --output \"$SIGNED_EFI\" "
 sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$WORKDIR/$SIGNED_UKI" BOOTX64.EFI 2>&1 | tee /tmp/sbsign.log
 ret=$?
 if [[ $ret -ne 0 ]]; then

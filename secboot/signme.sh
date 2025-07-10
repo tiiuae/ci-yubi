@@ -36,8 +36,6 @@ EFI_IMAGE="efi-partition.img"
 SIGNED_EFI="BOOTX64.EFI.signed"
 CERT="$1"
 KEY="vault:ghaf-secureboot-testkv:uefi-signing-key"
-REPO="harbor.ppclabz.net/ghaf-secboot/ghaf-uefi"
-TAG="signed"
 ZSTD_IMAGE="ghaf_0.0.1.raw.zst"
 
 if [ -z "$AZURE_CLI_ACCESS_TOKEN" ]; then
