@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
+
+## SPDX-FileCopyrightText: 2022-2024 TII (SSRC) and the Ghaf contributors
+## SPDX-License-Identifier: Apache-2.0
+
+######################################################################################
+# This script is expecting AZURE_CLI_ACCESS_TOKEN to be set
+# Otherwise (or in case of Azure VM) it will request it based on current az login info
+######################################################################################
 set -euo pipefail
+
 
 log() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"
@@ -68,13 +77,6 @@ for cmd in zstd fdisk dd mcopy sbsign; do
     fi
 done
 
-# Jenkins global credentials / Jenkins secrets are used for now
-# TODO: Consider more secure approach
-#if [[ -z "${ORAS_USERNAME:-}" || -z "${ORAS_PASSWORD:-}" ]]; then
-#    log "[!] ORAS_USERNAME and ORAS_PASSWORD must be set"
-#    exit 1
-#fi
-
 log "[*] Cleaning up any previous artifacts..."
 rm -f "$DISK_IMAGE" "$EFI_IMAGE" "$SIGNED_EFI" BOOTX64.EFI
 
@@ -110,7 +112,7 @@ fi
 
 log "[*] Signing BOOTX64.EFI..."
 
-log "[DEBUG] Running: sbsign --engine e_akv --keyform engine --key \"$KEY\" --cert \"$CERT\" --output \"$SIGNED_EFI\" BOOTX64.EFI"
+log "[DEBUG] Running: sbsign with params --key $KEY --cert $CERT --output $SIGNED_EFI"
 sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$SIGNED_EFI" BOOTX64.EFI 2>&1 | tee /tmp/sbsign.log
 ret=$?
 if [[ $ret -ne 0 ]]; then
@@ -144,11 +146,4 @@ else
 fi
 
 
-#log "[*] Logging into OCI registry..."
-#oras login harbor.ppclabz.net -u "$ORAS_USERNAME" -p "$ORAS_PASSWORD"
-
-#log "[*] Pushing $SIGNED_ZST to OCI registry as $REPO:$TAG..."
-#oras push "$REPO:$TAG" "$SIGNED_ZST:application/octet-stream"
-
-#log "[+] Success! Image uploaded as $REPO:$TAG"
 log "[+] EFI Signing Success!"
