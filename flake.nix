@@ -46,15 +46,18 @@
 
 	signmeScript = pkgs.writeShellApplication {
 	  name = "signme";
-	  runtimeInputs = [
-	    pkgs.util-linux     # for fdisk, losetup, etc.
-	    pkgs.mtools
-	    pkgs.gawk
-	    sbsignPkg           # from flake input
-    	    akvenginePkg        # from flake input
-	    pkgs.xorriso
-	    pkgs.systemdUkify
-  	];
+	  runtimeInputs = 
+	    (with pkgs; [
+	      util-linux # for fdisk, losetup, etc.
+	      mtools
+	      gawk
+	      xorriso
+	      systemdUkify	    
+	    ]) 
+	    ++ [
+	      sbsignPkg # from flake inputs
+	      akvenginePkg # from flake inputs
+  	    ];
 
 	text = ''
     	  set -euo pipefail
