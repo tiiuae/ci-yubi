@@ -19,10 +19,10 @@ LOG = logging.getLogger(os.path.abspath(__file__))
 
 
 # Default certificate to be used if no argument is given
-CERTIFICATE_NAME="INT-Ghaf-Devenv-Common"
+CERTIFICATE_NAME="INT-Ghaf-UAE-Prodenv-Common"
 
 # Azure Function (verify-signature) URL
-URL = "https://ghaf-devenv-signverify.azurewebsites.net/api/verifysignature"
+URL = "https://ghaf-uae-prodenv-signverify-dbcpcvfvbkafgqh6.uaenorth-01.azurewebsites.net/api/verifysignature"
 
 def main():
     """Send REST API request to VerifySignature Azure Function"""

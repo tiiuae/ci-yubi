@@ -10,7 +10,7 @@ from azure.keyvault.keys.crypto import CryptographyClient, SignatureAlgorithm
 
 from sha256tree import sha256sum
 
-KEY_VAULT_URL = "https://ghaf-devenv-ca.vault.azure.net/"
+KEY_VAULT_URL = "https://ghaf-prodenv-ca.vault.azure.net/"
 CERTIFICATE_NAME = "."
 
 
