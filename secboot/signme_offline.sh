@@ -119,7 +119,7 @@ if [[ $ret -ne 0 ]]; then
 fi
 
 log "[*] Signing the UKI image ..."
-nix run github:tiiuae/sbsigntools -- --keyform PEM --key keys/db.key --cert keys/db.crt --output "$SIGNED_EFI" BOOTX64.EFI.uki
+nix run github:tiiuae/sbsigntools -- --keyform PEM --key "$PKEY" --cert "$CERT" --output "$SIGNED_EFI" BOOTX64.EFI.uki
 
 log "[*] Inserting signed BOOTX64.EFI back into EFI image..."
 if ! mcopy -o -i "$EFI_IMAGE" "$SIGNED_EFI" ::EFI/BOOT/BOOTX64.EFI; then
