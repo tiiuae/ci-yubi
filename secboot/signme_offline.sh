@@ -41,7 +41,7 @@ case "$DISK_IMAGE_ZST" in
 	input_type="iso"
 	log "ISO Image detected"
 	log "PWD: $PWD"
-	./signiso.sh $2
+	./signiso.sh "$3"
 	exit 0
 	;;
     *.zst)
@@ -65,7 +65,7 @@ if [[ "$input_type" == "zst" ]]; then
     log "[*] Decompressing image: $DISK_IMAGE_ZST -> $DISK_IMAGE"
     zstd -d "$DISK_IMAGE_ZST" -o "$DISK_IMAGE"
 else
-    cp $DISK_IMAGE_ZST $DISK_IMAGE_ISO
+    cp "$DISK_IMAGE_ZST" "$DISK_IMAGE_ISO"
     DISK_IMAGE=$DISK_IMAGE_ISO
 fi
 log "[*] Disk image: $DISK_IMAGE"
@@ -137,12 +137,12 @@ if [[ "$input_type" == "zst" ]]; then
     log "[*] Recompressing signed image to $SIGNED_ZST..."
     zstd -f "$DISK_IMAGE" -o "$SIGNED_ZST"
     log "[*] Move signed image to $SUBDIR"
-    mkdir -p $SUBDIR
-    mv $SIGNED_ZST $SUBDIR
+    mkdir -p "$SUBDIR"
+    mv $SIGNED_ZST "$SUBDIR"
 else
     log "[*] Move signed image to $SUBDIR"
-    mkdir -p $SUBDIR
-    mv $DISK_IMAGE_ISO $SUBDIR
+    mkdir -p "$SUBDIR"
+    mv $DISK_IMAGE_ISO "$SUBDIR"
 fi
 
 
