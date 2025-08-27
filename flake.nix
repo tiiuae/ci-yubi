@@ -44,6 +44,30 @@
 	sbsignPkg = sbsigntools.packages.${system}.default;
 	akvenginePkg = akvengine.packages.${system}.default;
 
+	signuefi = pkgs.writeShellApplication {
+	  name = "signuefi";
+	  runtimeInputs =
+	    (with pkgs; [
+	      coreutils
+	      gawk
+	      util-linux
+	      mtools
+	      zstd
+	      systemdUkify
+	      openssl
+	    ])
+	    ++ [
+	      sbsignPkg
+	    ];
+	    text = builtins.readFile ./secboot/signme_offline.sh;
+	};
+
+	keygen = pkgs.writeShellApplication {
+	  name = "uefi-keygen";
+	  runtimeInputs = (with pkgs; [ openssl ]);
+	  text = builtins.readFile ./secboot/keygen.sh;
+	};
+
 	signmeScript = pkgs.writeShellApplication {
 	  name = "signme";
 	  runtimeInputs = 
@@ -108,6 +132,16 @@ EOF
 	  signme = {
 	    type = "app";
 	    program = "${signmeScript}/bin/signme";
+	  };
+
+	  signuefi = {
+	    type = "app";
+	    program = "${signuefi}/bin/signuefi";
+	  };
+
+	  uefikeygen = {
+	    type = "app";
+	    program = "${keygen}/bin/uefi-keygen";
 	  };
         };
       }
