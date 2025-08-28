@@ -44,8 +44,8 @@
 	sbsignPkg = sbsigntools.packages.${system}.default;
 	akvenginePkg = akvengine.packages.${system}.default;
 
-	signuefi = pkgs.writeShellApplication {
-	  name = "signuefi";
+	uefisign = pkgs.writeShellApplication {
+	  name = "uefisign";
 	  runtimeInputs =
 	    (with pkgs; [
 	      coreutils
@@ -63,9 +63,15 @@
 	};
 
 	keygen = pkgs.writeShellApplication {
-	  name = "uefi-keygen";
+	  name = "uefikeygen";
 	  runtimeInputs = (with pkgs; [ openssl ]);
-	  text = builtins.readFile ./secboot/keygen.sh;
+	  text = ''
+	    set -euo pipefail
+
+	    export CONF=${./secboot/conf}
+	    exec ${./secboot}/keygen.sh "$@"
+	  '';
+
 	};
 
 	signmeScript = pkgs.writeShellApplication {
@@ -134,14 +140,14 @@ EOF
 	    program = "${signmeScript}/bin/signme";
 	  };
 
-	  signuefi = {
+	  uefisign = {
 	    type = "app";
-	    program = "${signuefi}/bin/signuefi";
+	    program = "${uefisign}/bin/uefisign";
 	  };
 
 	  uefikeygen = {
 	    type = "app";
-	    program = "${keygen}/bin/uefi-keygen";
+	    program = "${keygen}/bin/uefikeygen";
 	  };
         };
       }
