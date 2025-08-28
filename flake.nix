@@ -142,7 +142,7 @@ EOF
 
 	  uefisign = {
 	    type = "app";
-	    program = "${uefisign}/bin/signuefi";
+	    program = "${uefisign}/bin/uefisign";
 	  };
 
 	  uefikeygen = {

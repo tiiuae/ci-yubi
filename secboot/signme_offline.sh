@@ -17,6 +17,7 @@ err_report() {
 trap 'err_report $LINENO' ERR
 
 cleanup() {
+    log "[DEBUG] Cleanup function"
     rm -rf bzImage.efi
     rm -rf BOOTX64.EFI.uki
     rm -rf "$SIGNED_EFI"
@@ -26,6 +27,8 @@ cleanup() {
     rm -rf disk.raw
 }
 
+# shellcheck disable=SC2154
+trap 'rc=$?; cleanup; exit $rc' EXIT
 
 # Input and constants
 if [[ $# -ne 4 ]]; then
@@ -152,8 +155,5 @@ else
     mkdir -p "$SUBDIR"
     mv $DISK_IMAGE_ISO "$SUBDIR"
 fi
-
-log "[+] Cleanup temporary files... "
-cleanup
 
 log "[+] EFI Signing Success!"
