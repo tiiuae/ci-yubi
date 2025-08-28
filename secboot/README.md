@@ -37,7 +37,25 @@ UEFI firmware can operate in two key modes:
 
 ## Testing proposals
 
-### Manual testing on Nix (offline)
+### Manual testing on Nix (offline) - the easy way
+
+#### Create Key Hierarchy
+
+```
+nix run github:tiiuae/ci-yubi#uefikeygen
+```
+
+This should create a subfolder 'keys' with all required keys and certificates, both in PEM and DER formats.
+
+#### Sign the image
+
+Assuming the db.key and db.crt are in keys subfolder and storing result in output/ subfolder is desired:
+
+```
+nix run github:tiiuae/ci-yubi#uefisign -- keys/db.crt keys/db.key disk1.raw.zst output
+```
+
+### Manual testing on Nix (offline) - the hard way
 
 The manual testing method relies on locally created keys and doesn't require netHSM or Azure KeyVault. All of the steps can be performed offline.
 
