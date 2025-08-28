@@ -82,6 +82,7 @@
 
 	    exec ${./secboot}/keygen.sh "$@"
 	  '';
+
 	};
 
 	signmeScript = pkgs.writeShellApplication {
