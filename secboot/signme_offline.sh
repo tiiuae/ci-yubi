@@ -16,6 +16,17 @@ err_report() {
 }
 trap 'err_report $LINENO' ERR
 
+cleanup() {
+    rm -rf bzImage.efi
+    rm -rf BOOTX64.EFI.uki
+    rm -rf "$SIGNED_EFI"
+    rm -rf "$EFI_IMAGE"
+    rm -rf "initrd.efi"
+    rm -rf "BOOTX64.EFI.uki"
+    rm -rf disk.raw
+}
+
+
 # Input and constants
 if [[ $# -ne 4 ]]; then
     log "[!] Usage: $0 <certificate> <private-key> <disk-image.zst> <subdir>"
@@ -55,11 +66,8 @@ case "$DISK_IMAGE_ZST" in
 esac
 
 log "[*] Cleaning up any previous artifacts..."
-rm -f "$DISK_IMAGE" "$EFI_IMAGE" "$SIGNED_EFI" BOOTX64.EFI
-rm -rf "$SIGNED_EFI"
-rm -rf "initrd.efi"
-rm -rf "bzImage.efi"
-rm -rf "BOOTX64.EFI.uki"
+rm -f "$DISK_IMAGE" BOOTX64.EFI
+cleanup
 
 if [[ "$input_type" == "zst" ]]; then
     log "[*] Decompressing image: $DISK_IMAGE_ZST -> $DISK_IMAGE"
@@ -145,5 +153,7 @@ else
     mv $DISK_IMAGE_ISO "$SUBDIR"
 fi
 
+log "[+] Cleanup temporary files... "
+cleanup
 
 log "[+] EFI Signing Success!"

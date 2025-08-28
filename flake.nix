@@ -65,7 +65,23 @@
 	keygen = pkgs.writeShellApplication {
 	  name = "uefi-keygen";
 	  runtimeInputs = (with pkgs; [ openssl ]);
-	  text = builtins.readFile ./secboot/keygen.sh;
+	  text = ''
+	    set -euo pipefail
+
+	    if [ ! -e ./conf ]; then
+	      ln -s ${./secboot}/conf ./conf
+	      created_conf_link=1
+	    fi
+
+	    cleanup() {
+	      if [ -n "$created_conf_link" ]; then
+	        rm -f ./conf
+	      fi
+	    }
+	    trap cleanup EXIT
+
+	    exec ${./secboot}/keygen.sh "$@"
+	  '';
 	};
 
 	signmeScript = pkgs.writeShellApplication {
@@ -134,7 +150,7 @@ EOF
 	    program = "${signmeScript}/bin/signme";
 	  };
 
-	  signuefi = {
+	  uefisign = {
 	    type = "app";
 	    program = "${signuefi}/bin/signuefi";
 	  };
