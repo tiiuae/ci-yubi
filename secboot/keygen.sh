@@ -8,7 +8,7 @@ else
     ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 fi
 
-CONF="conf"
+#CONF="conf"
 
 OUT_DIR="${OUT_DIR:-"${PWD}/keys"}"
 mkdir -p "${OUT_DIR}"
