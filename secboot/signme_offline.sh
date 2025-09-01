@@ -13,7 +13,6 @@ err_report() {
 }
 trap 'err_report $LINENO' ERR
 
-# ------------ Input and constants (define BEFORE traps that use these vars) ------------
 if [[ $# -ne 4 ]]; then
   log "[!] Usage: $0 <certificate> <private-key> <disk-image.zst|.iso> <out-dir>"
   exit 1
