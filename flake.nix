@@ -5,7 +5,7 @@
   description = "YubiHSM/Yubikey related code for CI/CD use";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.05";
     flake-utils.url = "github:numtide/flake-utils";
 
     sbsigntools.url = "github:tiiuae/sbsigntools";
@@ -41,77 +41,76 @@
           propagatedBuildInputs = pythonDependencies;
         };
 
-	sbsignPkg = sbsigntools.packages.${system}.default;
-	akvenginePkg = akvengine.packages.${system}.default;
+        sbsignPkg = sbsigntools.packages.${system}.default;
+        akvenginePkg = akvengine.packages.${system}.default;
 
-	uefisign = pkgs.writeShellApplication {
-	  name = "uefisign";
-	  runtimeInputs =
-	    (with pkgs; [
-	      coreutils
-	      gawk
-	      util-linux
-	      mtools
-	      zstd
-	      systemdUkify
-	      openssl
-	    ])
-	    ++ [
-	      sbsignPkg
-	    ];
-	    text = builtins.readFile ./secboot/signme_offline.sh;
-	};
+        uefisign = pkgs.writeShellApplication {
+          name = "uefisign";
+          runtimeInputs =
+            (with pkgs; [
+              coreutils
+              gawk
+              util-linux
+              mtools
+              zstd
+              systemdUkify
+              openssl
+            ])
+            ++ [
+              sbsignPkg
+            ];
+          text = builtins.readFile ./secboot/signme_offline.sh;
+        };
 
-	keygen = pkgs.writeShellApplication {
-	  name = "uefikeygen";
-	  runtimeInputs = (with pkgs; [ openssl ]);
-	  text = ''
-	    set -euo pipefail
+        keygen = pkgs.writeShellApplication {
+          name = "uefikeygen";
+          runtimeInputs = (with pkgs; [ openssl ]);
+          text = ''
+            set -euo pipefail
 
-	    export CONF=${./secboot/conf}
-	    exec ${./secboot}/keygen.sh "$@"
-	  '';
+            export CONF=${./secboot/conf}
+            exec ${./secboot}/keygen.sh "$@"
+          '';
+        };
 
-	};
+        signmeScript = pkgs.writeShellApplication {
+          name = "signme";
+          runtimeInputs =
+            (with pkgs; [
+              util-linux # for fdisk, losetup, etc.
+              mtools
+              gawk
+              xorriso
+              systemdUkify
+            ])
+            ++ [
+              sbsignPkg # from flake inputs
+              akvenginePkg # from flake inputs
+            ];
 
-	signmeScript = pkgs.writeShellApplication {
-	  name = "signme";
-	  runtimeInputs = 
-	    (with pkgs; [
-	      util-linux # for fdisk, losetup, etc.
-	      mtools
-	      gawk
-	      xorriso
-	      systemdUkify	    
-	    ]) 
-	    ++ [
-	      sbsignPkg # from flake inputs
-	      akvenginePkg # from flake inputs
-  	    ];
+          text = ''
+            set -euo pipefail
 
-	text = ''
-    	  set -euo pipefail
+            tmpconf=$(mktemp)
+            cat > "$tmpconf" <<EOF
+            openssl_conf = openssl_init
 
-    	  tmpconf=$(mktemp)
-    	  cat > "$tmpconf" <<EOF
-openssl_conf = openssl_init
+            [openssl_init]
+            engines = engine_section
 
-[openssl_init]
-engines = engine_section
+            [engine_section]
+            akv = akv_section
 
-[engine_section]
-akv = akv_section
+            [akv_section]
+            engine_id = akv
+            dynamic_path = ${akvenginePkg}/lib/engines-3/e_akv.so
+            init = 1
+            EOF
 
-[akv_section]
-engine_id = akv
-dynamic_path = ${akvenginePkg}/lib/engines-3/e_akv.so
-init = 1
-EOF
-
-    export OPENSSL_CONF="$tmpconf"
-    exec ${./secboot/signme.sh} ${./secboot/uefi-signing-cert.pem} "$@"
-  '';
-};
+            export OPENSSL_CONF="$tmpconf"
+            exec ${./secboot/signme.sh} ${./secboot/uefi-signing-cert.pem} "$@"
+          '';
+        };
 
       in
       {
@@ -120,8 +119,15 @@ EOF
           packages = pythonDependencies;
         };
 
+        formatter = pkgs.nixfmt-tree;
+
         packages = {
-          inherit sigver;
+          inherit
+            sigver
+            signmeScript
+            uefisign
+            keygen
+            ;
         };
 
         apps = {
@@ -135,20 +141,20 @@ EOF
             program = "${sigver}/bin/verify";
           };
 
-	  signme = {
-	    type = "app";
-	    program = "${signmeScript}/bin/signme";
-	  };
+          signme = {
+            type = "app";
+            program = "${signmeScript}/bin/signme";
+          };
 
-	  uefisign = {
-	    type = "app";
-	    program = "${uefisign}/bin/uefisign";
-	  };
+          uefisign = {
+            type = "app";
+            program = "${uefisign}/bin/uefisign";
+          };
 
-	  uefikeygen = {
-	    type = "app";
-	    program = "${keygen}/bin/uefikeygen";
-	  };
+          uefikeygen = {
+            type = "app";
+            program = "${keygen}/bin/uefikeygen";
+          };
         };
       }
     );
