@@ -97,7 +97,6 @@ trap 'rm -rf "$TMPENT"; on_exit' EXIT
 # Copy all loader entries from ESP to TMPENT
 # (ignore errors if globs don't match)
 mcopy -n -i "$EFI_IMAGE" ::/loader/entries/*.conf "$TMPENT"/ 2>/dev/null || true
-#entry_file="$(ls -1 "$TMPENT"/*.conf 2>/dev/null | sort | tail -1 || true)"
 
 entry_file="$(
   find "$TMPENT" -maxdepth 1 -type f -name '*.conf' -print \
