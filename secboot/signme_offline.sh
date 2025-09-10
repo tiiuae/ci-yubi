@@ -97,7 +97,13 @@ trap 'rm -rf "$TMPENT"; on_exit' EXIT
 # Copy all loader entries from ESP to TMPENT
 # (ignore errors if globs don't match)
 mcopy -n -i "$EFI_IMAGE" ::/loader/entries/*.conf "$TMPENT"/ 2>/dev/null || true
-entry_file="$(ls -1 "$TMPENT"/*.conf 2>/dev/null | sort | tail -1 || true)"
+
+entry_file="$(
+  find "$TMPENT" -maxdepth 1 -type f -name '*.conf' -print \
+  | LC_ALL=C sort \
+  | tail -n 1 || true
+)"
+
 if [[ -z "${entry_file:-}" ]]; then
   log "[!] No loader entry found in ESP (/loader/entries/*.conf)"
   exit 1
@@ -118,7 +124,7 @@ mapfile -t INITRD_REL < <(awk '
     for (i=2;i<=NF;i++) print $i
   }' "$entry_file")
 for i in "${!INITRD_REL[@]}"; do
-  INITRD_REL[$i]="$(fat_path "${INITRD_REL[$i]}")"
+  INITRD_REL[i]="$(fat_path "${INITRD_REL[i]}")"
 done
 
 # exact kernel cmdline (contains systemConfig= and init=)
