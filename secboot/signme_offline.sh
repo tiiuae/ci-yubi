@@ -8,7 +8,7 @@ set -E  # make ERR traps fire in functions/subshells
 log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"; }
 
 err_report() {
-  log "[!] Error on line $1"
+  log "[!] Error on line $1: '$BASH_COMMAND'"
   exit 1
 }
 trap 'err_report $LINENO' ERR
