@@ -14,7 +14,7 @@ err_report() {
 trap 'err_report $LINENO' ERR
 
 if [[ $# -ne 4 ]]; then
-  log "[!] Usage: $0 <certificate> <private-key> <disk-image.zst|.iso> <out-dir>"
+  log "[!] Usage: $0 <certificate> <private-key> <disk-image.zst> <out-dir>"
   exit 1
 fi
 
@@ -23,31 +23,23 @@ PKEY="$2"
 DISK_IMAGE_ZST="$3"
 SUBDIR="$4"
 
-DISK_IMAGE="disk.raw"
-DISK_IMAGE_ISO="disk.iso"
-EFI_IMAGE="efi-partition.img"
-SIGNED_EFI="BOOTX64.EFI.signed"
-ZSTD_IMAGE="ghaf_0.0.1.raw.zst"
+TMPWDIR="$(mktemp -d --suffix .uefisign)"
+DISK_IMAGE="$TMPWDIR/disk.raw"
+EFI_IMAGE="$TMPWDIR/efi-partition.img"
+SIGNED_EFI="$TMPWDIR/BOOTX64.EFI.signed"
+SIGNED_ZST="$SUBDIR/signed_ghaf_0.0.1.raw.zst"
 
-cleanup() {
-  log "[DEBUG] Cleanup"
-  rm -f -- "bzImage.efi" "initrd.efi" "BOOTX64.EFI.uki"
-  rm -f -- "${SIGNED_EFI:-}" "${EFI_IMAGE:-}" "${DISK_IMAGE:-}"
+on_exit() {
+  log "[DEBUG] Cleanup (TMPWDIR:$TMPWDIR)"
+  rm -fr "$TMPWDIR"
 }
-on_exit(){ rc=$?; cleanup; exit "$rc"; }
 trap on_exit EXIT
 
+log "[DEBUG] Start (TMPWDIR:$TMPWDIR)"
 log "[DEBUG] cert: $CERT"
 log "[DEBUG] key : $PKEY"
 
 case "$DISK_IMAGE_ZST" in
-  *.iso)
-    input_type="iso"
-    log "ISO Image detected"
-    log "PWD: $PWD"
-    ./signiso.sh "$DISK_IMAGE_ZST"
-    exit 0
-    ;;
   *.zst)
     input_type="zst"
     log "ZST'ed Image detected"
@@ -58,15 +50,9 @@ case "$DISK_IMAGE_ZST" in
     ;;
 esac
 
-log "[*] Cleaning up any previous local artifacts..."
-rm -f "$DISK_IMAGE" "$DISK_IMAGE_ISO" "BOOTX64.EFI.uki" "$SIGNED_EFI"
-
 if [[ "$input_type" == "zst" ]]; then
   log "[*] Decompressing image: $DISK_IMAGE_ZST -> $DISK_IMAGE"
   zstd -d "$DISK_IMAGE_ZST" -o "$DISK_IMAGE"
-else
-  cp -f "$DISK_IMAGE_ZST" "$DISK_IMAGE_ISO"
-  DISK_IMAGE=$DISK_IMAGE_ISO
 fi
 log "[*] Disk image: $DISK_IMAGE"
 chmod 666 "$DISK_IMAGE" || true
@@ -91,15 +77,12 @@ fat_path() {
   printf '%s' "$p"
 }
 
-TMPENT="$(mktemp -d)"
-trap 'rm -rf "$TMPENT"; on_exit' EXIT
-
-# Copy all loader entries from ESP to TMPENT
+# Copy all loader entries from ESP to TMPWDIR
 # (ignore errors if globs don't match)
-mcopy -n -i "$EFI_IMAGE" ::/loader/entries/*.conf "$TMPENT"/ 2>/dev/null || true
+mcopy -n -i "$EFI_IMAGE" ::/loader/entries/*.conf "$TMPWDIR"/ 2>/dev/null || true
 
 entry_file="$(
-  find "$TMPENT" -maxdepth 1 -type f -name '*.conf' -print \
+  find "$TMPWDIR" -maxdepth 1 -type f -name '*.conf' -print \
   | LC_ALL=C sort \
   | tail -n 1 || true
 )"
@@ -128,25 +111,23 @@ for i in "${!INITRD_REL[@]}"; do
 done
 
 # exact kernel cmdline (contains systemConfig= and init=)
-CMDLINE_FILE="$(mktemp)"
-trap 'rm -rf "$TMPENT" "$CMDLINE_FILE"; on_exit' EXIT
-sed -n 's/^options[[:space:]]\+//p' "$entry_file" > "$CMDLINE_FILE"
-if [[ ! -s "$CMDLINE_FILE" ]]; then
+sed -n 's/^options[[:space:]]\+//p' "$entry_file" > "$TMPWDIR/cmdline"
+if [[ ! -s "$TMPWDIR/cmdline" ]]; then
   log "[!] No 'options' line in loader entry"
   exit 1
 fi
-log "[DEBUG] kernel cmdline: $(cat "$CMDLINE_FILE")"
+log "[DEBUG] kernel cmdline: $(cat "$TMPWDIR/cmdline")"
 
 # Kernel: copy from the ESP path referenced by the entry (not a wildcard)
-mcopy -o -i "$EFI_IMAGE" "::${LINUX_REL}" bzImage.efi
+mcopy -o -i "$EFI_IMAGE" "::${LINUX_REL}" "$TMPWDIR/bzImage.efi"
 
 # Initrds: copy each one to a local file and collect --initrd args
 INITRD_ARGS=()
 if [[ "${#INITRD_REL[@]}" -gt 0 ]]; then
   for r in "${INITRD_REL[@]}"; do
     base="$(basename "$r")"
-    mcopy -o -i "$EFI_IMAGE" "::${r}" "$base"
-    INITRD_ARGS+=( --initrd "$base" )
+    mcopy -o -i "$EFI_IMAGE" "::${r}" "$TMPWDIR/$base"
+    INITRD_ARGS+=( --initrd "$TMPWDIR/$base" )
   done
 else
   log "[*] No initrd lines in loader entry (OK for UKI if cmdline is complete)"
@@ -154,33 +135,31 @@ fi
 
 log "[*] Building UKI with original cmdline from loader entry..."
 ukify build \
-  --linux bzImage.efi \
+  --linux "$TMPWDIR/bzImage.efi" \
   "${INITRD_ARGS[@]}" \
-  --cmdline "@$CMDLINE_FILE" \
-  --output BOOTX64.EFI.uki
+  --cmdline "@$TMPWDIR/cmdline" \
+  --output "$TMPWDIR/BOOTX64.EFI.uki"
 
 log "[*] Signing the UKI image ..."
 nix run --accept-flake-config --option builders '' --option max-jobs 1 \
   github:tiiuae/sbsigntools -- \
   --keyform PEM --key "$PKEY" --cert "$CERT" \
-  --output "$SIGNED_EFI" BOOTX64.EFI.uki
+  --output "$SIGNED_EFI" "$TMPWDIR/BOOTX64.EFI.uki"
 
 UKI_DST_REL="/EFI/nixos/uki-signed.efi"
 log "[*] Placing signed UKI at ${UKI_DST_REL} in the ESP..."
 mcopy -o -i "$EFI_IMAGE" "$SIGNED_EFI" "::${UKI_DST_REL}"
 
 # Re-write loader entry: linux → UKI, remove initrd lines (keep options)
-tmp_entry_edit="$(mktemp)"
 awk -v new="${UKI_DST_REL}" '
   BEGIN{done=0}
   /^linux[[:space:]]/ && !done { print "linux " new; done=1; next }
   /^initrd[[:space:]]/ { next }
   { print }
-' "$entry_file" > "$tmp_entry_edit"
+' "$entry_file" > "$TMPWDIR/tmp_entry"
 
 log "[*] Updating loader entry to boot the UKI..."
-mcopy -o -i "$EFI_IMAGE" "$tmp_entry_edit" "::/loader/entries/$(basename "$entry_file")"
-rm -f "$tmp_entry_edit"
+mcopy -o -i "$EFI_IMAGE" "$TMPWDIR/tmp_entry" "::/loader/entries/$(basename "$entry_file")"
 
 # Also refresh fallback BOOTX64.EFI for good measure
 log "[*] Updating fallback EFI/BOOT/BOOTX64.EFI ..."
@@ -193,14 +172,8 @@ log "[+] Signed image updated in $DISK_IMAGE"
 
 mkdir -p "$SUBDIR"
 if [[ "$input_type" == "zst" ]]; then
-  SIGNED_ZST="signed_$ZSTD_IMAGE"
   log "[*] Recompressing signed image to $SIGNED_ZST..."
   zstd -f "$DISK_IMAGE" -o "$SIGNED_ZST"
-  log "[*] Move signed image to $SUBDIR"
-  mv -f "$SIGNED_ZST" "$SUBDIR/"
-else
-  log "[*] Move signed ISO to $SUBDIR"
-  mv -f "$DISK_IMAGE_ISO" "$SUBDIR/"
 fi
 
 log "[+] EFI Signing Success!"
