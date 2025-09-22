@@ -21,13 +21,13 @@ fi
 CERT="$1"
 PKEY="$2"
 DISK_IMAGE_ZST="$3"
-SUBDIR="$4"
+OUTDIR="$4"
 
 TMPWDIR="$(mktemp -d --suffix .uefisign)"
 DISK_IMAGE="$TMPWDIR/disk.raw"
 EFI_IMAGE="$TMPWDIR/efi-partition.img"
 SIGNED_EFI="$TMPWDIR/BOOTX64.EFI.signed"
-SIGNED_ZST="$SUBDIR/signed_ghaf_0.0.1.raw.zst"
+SIGNED_ZST="$OUTDIR/signed_ghaf_0.0.1.raw.zst"
 
 on_exit() {
   log "[DEBUG] Cleanup (TMPWDIR:$TMPWDIR)"
@@ -170,7 +170,7 @@ dd if="$EFI_IMAGE" of="$DISK_IMAGE" bs=512 seek="$EFI_START" conv=notrunc status
 
 log "[+] Signed image updated in $DISK_IMAGE"
 
-mkdir -p "$SUBDIR"
+mkdir -p "$OUTDIR"
 if [[ "$input_type" == "zst" ]]; then
   log "[*] Recompressing signed image to $SIGNED_ZST..."
   zstd -f "$DISK_IMAGE" -o "$SIGNED_ZST"
