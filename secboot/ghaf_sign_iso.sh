@@ -7,13 +7,13 @@
 set -euo pipefail
 log(){ printf "[%(%F %T)T] %s\n" -1 "$*"; }
 die(){ log "[!] $*"; exit 1; }
-need(){ command -v "$1" >/dev/null 2>&1 || die "Missing tool: $1"; }
+is_needed(){ command -v "$1" >/dev/null 2>&1 || die "Missing tool: $1"; }
 
 [[ $# -eq 4 ]] || die "Usage: $0 <db.crt> <db.key> <ghaf.iso> <out-dir>"
 CERT="$1"; PKEY="$2"; ISO_IN="$3"; OUTDIR="$4"
 
-for b in xorriso mtype mdir mmd mcopy mkfs.vfat awk sed tr stat ukify unsquashfs mksquashfs zstd strings; do need "$b"; done
-need nix
+for b in xorriso mtype mdir mmd mcopy mkfs.vfat awk sed tr stat ukify unsquashfs mksquashfs zstd strings; do is_needed "$b"; done
+is_needed nix
 
 WORK="$(mktemp -d)"
 cleanup(){ chmod -R u+rwX "$WORK" >/dev/null 2>&1 || true; rm -rf "$WORK" >/dev/null 2>&1 || true; }
@@ -25,12 +25,14 @@ export MTOOLS_SKIP_CHECK=1
 fat_path(){ local p="${1//\\//}"; p="${p%\"}"; p="${p#\"}"; p="${p%\'}"; p="${p#\'}"; [[ "${p:0:1}" == "/" ]] || p="/$p"; p="${p//\/\//\/}"; printf '%s' "$p"; }
 esp_free_bytes(){ mdir -i "$1" :: 2>/dev/null | awk '/bytes free/ {gsub(/,/, "", $1); print $1; exit}'; }
 grow_esp_if_needed(){ # enlarge FAT file if not enough space
-  local img="$1" need="$2" free cur new tmp newimg
+  local img="$1" need_bytes="$2" free cur new tmp newimg
   free=$(esp_free_bytes "$img"); free=${free:-0}
-  (( free >= need )) && return 0
+  (( free >= need_bytes )) && return 0
   cur=$(stat -c%s "$img")
-  new=$(( cur + need + 64*1024*1024 )); (( new < cur*2 )) && new=$(( cur*2 ))
-  log "[*] ESP too small (free=${free}B need~=${need}B). Rebuilding to ${new} bytes…"
+  local add=$(( need_bytes > free ? need_bytes - free : 0 ))
+  new=$(( cur + add + 64*1024*1024 ))
+  (( new < cur*2 )) && new=$(( cur*2 ))
+  log "[*] ESP too small (free=${free}B need=${need_bytes}B). Rebuilding to ${new} bytes…"
   tmp="$(mktemp -d)"
   mcopy -s -n -i "$img" ::/* "$tmp"/ 2>/dev/null || true
   newimg="${img}.new"; truncate -s "$new" "$newimg"
