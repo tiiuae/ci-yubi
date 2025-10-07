@@ -175,7 +175,7 @@ log "[*] Exposed unsigned runtime image: $EXPOSED_IN"
 # Call your existing raw signer (flake) to inject signed UKI into the runtime image
 OUTDIR_RAW="$WORK/raw_out"; mkdir -p "$OUTDIR_RAW"
 log "[*] Signing runtime raw.zst via ci-yubi#uefisign…"
-nix run github:tiiuae/ci-yubi#uefisign "$CERT" "$PKEY" "$EXPOSED_IN" "$OUTDIR_RAW"
+./signme_offline.sh "$CERT" "$PKEY" "$EXPOSED_IN" "$OUTDIR_RAW"
 
 SIGNED_OUT="$(ls -1 "$OUTDIR_RAW"/*.raw.zst 2>/dev/null | head -n1 || true)"
 [[ -n "$SIGNED_OUT" && -f "$SIGNED_OUT" ]] || die "uefisign did not produce a *.raw.zst in $OUTDIR_RAW"
