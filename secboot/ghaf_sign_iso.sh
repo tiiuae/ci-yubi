@@ -37,7 +37,10 @@ grow_esp_if_needed(){ # enlarge FAT file if not enough space
   mcopy -s -n -i "$img" ::/* "$tmp"/ 2>/dev/null || true
   newimg="${img}.new"; truncate -s "$new" "$newimg"
   mkfs.vfat -F32 -n EFI "$newimg" >/dev/null
-  if compgen -G "$tmp/*" >/dev/null; then mcopy -s -n -i "$newimg" "$tmp"/* :: >/dev/null; fi
+  # restore files only if anything was copied out (portable: no compgen)
+  if [ -n "$(find "$tmp" -mindepth 1 -print -quit 2>/dev/null)" ]; then
+    mcopy -s -n -i "$newimg" "$tmp"/* :: >/dev/null
+  fi
   mv -f "$newimg" "$img"; rm -rf "$tmp"
 }
 
@@ -64,6 +67,7 @@ find_raw_in_sqfs(){ # robust locate *.raw.zst inside squashfs
   else
     rel="$( set +e; unsquashfs -l "$sqfs" 2> "$WORK/unsq.err" | awk '$NF ~ /\.raw\.zst$/ {print $NF; exit}'; echo "EC=$?" )"
   fi
+  #shellcheck disable=SC2034
   ec="${rel##*EC=}"; rel="${rel%EC=*}"
   rel="${rel#./}"; rel="${rel#squashfs-root/}"
   printf '%s' "$rel"
@@ -137,10 +141,9 @@ log "[*] Building installer UKI…"
 ukify build --linux "$WORK/bzImage.efi" "${INITRD_ARGS[@]}" --cmdline @"$WORK/cmdline.txt" --output "$WORK/BOOTX64.EFI"
 
 log "[*] Signing installer UKI…"
-nix run --accept-flake-config --option builders '' --option max-jobs 1 \
-  github:tiiuae/sbsigntools -- \
-  --keyform PEM --key "$PKEY" --cert "$CERT" \
-  --output "$WORK/BOOTX64.EFI.signed" "$WORK/BOOTX64.EFI"
+#nix run --accept-flake-config --option builders '' --option max-jobs 1 \
+#  github:tiiuae/sbsigntools -- \
+sbsign --keyform PEM --key "$PKEY" --cert "$CERT" --output "$WORK/BOOTX64.EFI.signed" "$WORK/BOOTX64.EFI"
 
 NEED=$(( $(stat -c%s "$WORK/BOOTX64.EFI.signed") + 2*1024*1024 ))
 grow_esp_if_needed "$WORK/esp.img" "$NEED"
@@ -175,8 +178,9 @@ log "[*] Exposed unsigned runtime image: $EXPOSED_IN"
 # Call your existing raw signer (flake) to inject signed UKI into the runtime image
 OUTDIR_RAW="$WORK/raw_out"; mkdir -p "$OUTDIR_RAW"
 log "[*] Signing runtime raw.zst via ci-yubi#uefisign…"
-./signme_offline.sh "$CERT" "$PKEY" "$EXPOSED_IN" "$OUTDIR_RAW"
+uefisign "$CERT" "$PKEY" "$EXPOSED_IN" "$OUTDIR_RAW"
 
+# shellcheck disable=SC2012
 SIGNED_OUT="$(ls -1 "$OUTDIR_RAW"/*.raw.zst 2>/dev/null | head -n1 || true)"
 [[ -n "$SIGNED_OUT" && -f "$SIGNED_OUT" ]] || die "uefisign did not produce a *.raw.zst in $OUTDIR_RAW"
 
