@@ -62,6 +62,29 @@
           text = builtins.readFile ./secboot/signme_offline.sh;
         };
 
+        uefisigniso = pkgs.writeShellApplication {
+          name = "uefisigniso";
+          runtimeInputs =
+            (with pkgs; [
+              coreutils
+              gawk
+              util-linux
+              mtools
+              zstd
+              systemdUkify
+              openssl
+	      xorriso
+	      squashfsTools
+	      binutils
+	      findutils
+            ])
+            ++ [
+              sbsignPkg
+	      uefisign
+            ];
+          text = builtins.readFile ./secboot/ghaf_sign_iso.sh;
+        };
+
         keygen = pkgs.writeShellApplication {
           name = "uefikeygen";
           runtimeInputs = (with pkgs; [ openssl ]);
@@ -126,6 +149,7 @@
             sigver
             signmeScript
             uefisign
+	    uefisigniso
             keygen
             ;
         };
@@ -150,6 +174,11 @@
             type = "app";
             program = "${uefisign}/bin/uefisign";
           };
+
+          uefisigniso = {
+	    type = "app";
+	    program ="${uefisigniso}/bin/uefisigniso";
+	  };
 
           uefikeygen = {
             type = "app";
