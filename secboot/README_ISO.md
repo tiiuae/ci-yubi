@@ -42,7 +42,9 @@ Install sbsign, for example https://github.com/tiiuae/sbsigntools or the one pro
 
 `
 git clone git@github.com:tiiuae/ci-yubi.git
+
 cd ci-yubi/secboot
+
 alias uefisign="$PWD/signme_offline.sh"
 `
 
