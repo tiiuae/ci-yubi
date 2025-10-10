@@ -143,7 +143,15 @@ ukify build --linux "$WORK/bzImage.efi" "${INITRD_ARGS[@]}" --cmdline @"$WORK/cm
 log "[*] Signing installer UKI…"
 #nix run --accept-flake-config --option builders '' --option max-jobs 1 \
 #  github:tiiuae/sbsigntools -- \
-sbsign --keyform PEM --key "$PKEY" --cert "$CERT" --output "$WORK/BOOTX64.EFI.signed" "$WORK/BOOTX64.EFI"
+
+if [[ "$PKEY" == pkcs11:* ]]; then
+    sbsign --engine pkcs11 --keyform engine \
+	   --key "$PKEY" \
+	   --cery "$CERT" \
+	   --output "$WORK/BOOTX64.EFI.signed" "$WORK/BOOTX64.EFI"
+else
+    sbsign --keyform PEM --key "$PKEY" --cert "$CERT" --output "$WORK/BOOTX64.EFI.signed" "$WORK/BOOTX64.EFI"
+fi
 
 NEED=$(( $(stat -c%s "$WORK/BOOTX64.EFI.signed") + 2*1024*1024 ))
 grow_esp_if_needed "$WORK/esp.img" "$NEED"

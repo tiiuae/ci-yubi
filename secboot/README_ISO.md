@@ -55,3 +55,23 @@ If the keys are in ./keys/ folder, then run:
 `
 
 The above command line will store the image in out/ subfolder.
+
+## Using the script with HSM (YubiHSM, NetHSM, etc)
+
+It is possible to keep Secure Boot keys inside any PKCS11 enabled HSM and let the signing happen without the private key ever leaving the device.
+
+### Requirements
+
+ - HSM initialized and reachable (USB or network)
+ - HSM pkcs11 library installed on the build host
+ - A DB keypair created and stored on HSM
+ - x509 certificate corresponding to DB keypair. Can be stored locally.
+ - PKCS#11 URI (or token label/object ID) for the private key
+
+### Usage
+
+`
+uefisigniso ./keys/db.crt 'pkcs11:token=GhafHSM;object=DB;type=private' ghaf.iso out/
+`
+
+This should produce the signed ISO using the key referenced by PKCS11 URI on the HSM.
