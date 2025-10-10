@@ -32,7 +32,6 @@ If needed, DB, KEK and PK keys/certificates can be generated with keygen.sh scri
 ### Install Dependencies
 
 `
-
 sudo apt update
 sudo apt install -y xorriso mtools squashfs-tools zstd binutils findutils systemd-ukify
 
@@ -43,7 +42,6 @@ Install sbsign, for example https://github.com/tiiuae/sbsigntools or the one pro
 ## Clone the repo and run the script
 
 `
-
 git clone git@github.com:tiiuae/ci-yubi.git
 cd ci-yubi/secboot
 alias uefisign="$PWD/signme_offline.sh"
@@ -53,7 +51,6 @@ alias uefisign="$PWD/signme_offline.sh"
 If the keys are in ./keys/ folder, then run:
 
 `
-
 ./ghaf_sign_iso.sh ./keys/db.crt ./keys/db.key ghaf.iso out/
 
 `
