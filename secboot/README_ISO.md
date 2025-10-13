@@ -34,6 +34,7 @@ If needed, DB, KEK and PK keys/certificates can be generated with keygen.sh scri
 `
 sudo apt update
 sudo apt install -y xorriso mtools squashfs-tools zstd binutils findutils systemd-ukify
+sudo apt install systemd-boot-efi
 `
 
 Install sbsign, for example https://github.com/tiiuae/sbsigntools or the one provided by systemd.
