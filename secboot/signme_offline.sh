@@ -141,10 +141,15 @@ ukify build \
   --output "$TMPWDIR/BOOTX64.EFI.uki"
 
 log "[*] Signing the UKI image ..."
-nix run --accept-flake-config --option builders '' --option max-jobs 1 \
-  github:tiiuae/sbsigntools -- \
-  --keyform PEM --key "$PKEY" --cert "$CERT" \
-  --output "$SIGNED_EFI" "$TMPWDIR/BOOTX64.EFI.uki"
+
+if [[ "$PKEY" == pkcs11:* ]]; then
+    sbsign --engine pkcs11 --keyform engine \
+	   --key "$PKEY" \
+	   --cery "$CERT" \
+	   --output "$SIGNED_EFI" "$TMPWDIR/BOOTX64.EFI.uki"
+else
+    sbsign --keyform PEM --key "$PKEY" --cert "$CERT" --output "$SIGNED_EFI" "$TMPWDIR/BOOTX64.EFI.uki"
+fi
 
 UKI_DST_REL="/EFI/nixos/uki-signed.efi"
 log "[*] Placing signed UKI at ${UKI_DST_REL} in the ESP..."
