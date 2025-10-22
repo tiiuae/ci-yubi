@@ -8,13 +8,15 @@ else
     ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 fi
 
-CONF="${CONF:-./conf}"
+TARGET="${1:-}"
 
-OUT_DIR="${OUT_DIR:-"${PWD}/keys"}"
+CONF="${CONF:-${PWD}/conf}"
+
+OUT_DIR="${OUT_DIR:-"${PWD}/${TARGET}/keys"}"
 mkdir -p "${OUT_DIR}"
 
 # Create Keypair for PK (the root or top CA key)
-openssl genrsa -out keys/pk.key 2048
+openssl genrsa -out ${OUT_DIR}/pk.key 2048
 
 # Create self-signed certificate for PK
 openssl req -new -x509 -days 3650 -key "${OUT_DIR}/pk.key" -out "${OUT_DIR}/pk.crt" -config "${CONF}/create_PK_cert.ini"
@@ -35,7 +37,7 @@ openssl genrsa -out "${OUT_DIR}/db.key" 2048
 openssl req -new -key "${OUT_DIR}/db.key" -out "${OUT_DIR}/db.csr" -config "${CONF}/create_DB_cert.ini"
 
 # Sign DB CSR with KEK
-openssl x509 -req -in keys/db.csr -CA "${OUT_DIR}/kek.crt" -CAkey "${OUT_DIR}/kek.key" -CAcreateserial -out "${OUT_DIR}/db.crt" -days 3650 -extfile "${CONF}/sign_DB_csr.ini" -extensions v3_req
+openssl x509 -req -in ${OUT_DIR}/db.csr -CA "${OUT_DIR}/kek.crt" -CAkey "${OUT_DIR}/kek.key" -CAcreateserial -out "${OUT_DIR}/db.crt" -days 3650 -extfile "${CONF}/sign_DB_csr.ini" -extensions v3_req
 
 openssl x509 -in "${OUT_DIR}/pk.crt"  -outform DER -out "${OUT_DIR}/pk.der"
 openssl x509 -in "${OUT_DIR}/kek.crt" -outform DER -out "${OUT_DIR}/kek.der"
