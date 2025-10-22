@@ -10,7 +10,7 @@ fi
 
 TARGET="${1:-}"
 
-CONF="${CONF:-./conf}"
+CONF="${CONF:-${PWD}/conf}"
 
 OUT_DIR="${OUT_DIR:-"${PWD}/${TARGET}/keys"}"
 mkdir -p "${OUT_DIR}"
