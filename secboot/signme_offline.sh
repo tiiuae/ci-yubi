@@ -143,9 +143,11 @@ ukify build \
 log "[*] Signing the UKI image ..."
 
 if [[ "$PKEY" == pkcs11:* ]]; then
-    sbsign --engine pkcs11 --keyform engine \
-	   --key "$PKEY" \
-	   --cery "$CERT" \
+    systemd-sbsign sign \
+           --private-key-source provider:pkcs11	\
+           --private-key "$PKEY" \
+           --certitificate-source provider:pkcs11 \
+           --certificate "$CERT" \
 	   --output "$SIGNED_EFI" "$TMPWDIR/BOOTX64.EFI.uki"
 else
     sbsign --keyform PEM --key "$PKEY" --cert "$CERT" --output "$SIGNED_EFI" "$TMPWDIR/BOOTX64.EFI.uki"
