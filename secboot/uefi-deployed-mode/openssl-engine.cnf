@@ -1,0 +1,20 @@
+openssl_conf = openssl_init
+
+[openssl_init]
+providers = provider_sect
+engines   = engine_sect
+
+[provider_sect]
+default = default_sect
+
+[default_sect]
+activate = 1
+
+[engine_sect]
+pkcs11 = pkcs11_sect
+
+[pkcs11_sect]
+dynamic_path = /usr/lib/x86_64-linux-gnu/engines-3/pkcs11.so
+MODULE_PATH  = /usr/lib/softhsm/libsofthsm2.so
+# Optional: PIN = 7654321
+INIT = 1
