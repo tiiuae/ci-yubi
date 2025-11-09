@@ -1,11 +1,45 @@
-### Build docker
+### Clone the Repository
 
-docker build --network=host --build-arg TOKEN_LABEL=UEFI-Token --build-arg SO_PIN=3537363231383830 --build-arg USER_PIN=123456 -t softhsm-secboot:latest .
+git clone git@github.com:tiiuae/ci-yubi.git
+cd ci-yubi/secboot/uefi-deployed-mode/
 
-### Run docker
+### Prepare the Shared Folder
 
-docker run --network=host -v "${PWD}/out:/work/out --rm -it softhsm-secboot:latest /bin/bash
+Create an output subfolder and copy your ISO image into it:
 
-### Run ./demo.sh
+mkdir out
+cp /path/to/your.iso out/
 
+### Build the Docker image
+
+from uefi-deployed-mode folder, build the Docker image
+
+docker build --network=host \
+  --build-arg TOKEN_LABEL=UEFI-Token \
+  --build-arg SO_PIN=3537363231383830 \
+  --build-arg USER_PIN=123456 \
+  -t softhsm-secboot:latest .
+
+### Run the Docker Container
+
+Start the container with the shared folder mounted:
+
+docker run --network=host \
+  -v "${PWD}/out:/work/out \
+  --rm -it softhsm-secboot:latest /bin/bash
+
+### Run the Demo Script
+
+inside the container:
+
+cd /root
 ./demo.sh
+
+### Exit the Container and Provision UEFI
+
+After exiting the Docker container, the shared out folder will contain:
+
+  - All generated .esl and .auth files
+  - The signed Ghaf image, located in the out/signed subdirectory
+
+You can now proceed with provisioning your UEFI environment using these signed artifacts.

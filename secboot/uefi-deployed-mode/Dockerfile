@@ -19,7 +19,19 @@ RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4 \
     sbsigntool efitools jq curl ca-certificates \
     libengine-pkcs11-openssl \
     uuid-runtime \
+    xorriso mtools dosfstools gawk sed coreutils systemd-ukify squashfs-tools zstd binutils systemd-boot fdisk \
+    git automake build-essential binutils-dev \
+    pkg-config autoconf automake libtool m4 libssl-dev libssl3 gnu-efi uuid-dev help2man \
  && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /root/inst
+RUN cd /root/inst && git clone https://github.com/tiiuae/sbsigntools.git
+WORKDIR /root/inst/sbsigntools
+RUN ./autogen.sh
+RUN ./configure
+RUN make
+RUN cp /root/inst/sbsigntools/src/sbsign /root/sbsign
+
 
 # Ensure token directory exists (Ubuntu defaults to this path)
 RUN mkdir -p /var/lib/softhsm/tokens && chown -R root:root /var/lib/softhsm
@@ -144,6 +156,10 @@ RUN chmod +x /usr/local/bin/init-softhsm.sh
 
 # Make token storage a volume so keys survive container restarts
 VOLUME ["/var/lib/softhsm/tokens", "/opt/keys"]
+
+COPY ghaf_sign_iso.sh /root/
+COPY signme_offline.sh /root/
+COPY sbsign /root/
 
 COPY provision-uefi-auth.sh /root/
 COPY openssl-engine.cnf /root/
