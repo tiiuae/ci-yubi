@@ -4,14 +4,6 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive \
     SOFTHSM2_CONF=/etc/softhsm/softhsm2.conf
 
-# ---- Install SoftHSM + PKCS#11 + helper tools ----
-# - softhsm2: the HSM emulator
-# - opensc + pkcs11-tool: common PKCS#11 CLI tools
-# - libp11-3 + libengine-pkcs11-openssl: OpenSSL PKCS#11 engine bridge (handy with OpenSSL 3 too)
-# - p11-kit: PKCS#11 module loader ecosystem
-# - openssl: crypto CLI
-# - sbsigntool, efitools: common for UEFI secure boot workflows
-# - jq, curl, ca-certificates: utilities you’ll likely want in CI
 RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4 \
  && apt-get update -o Acquire::Retries=5 \
  && apt-get install -y --no-install-recommends \
@@ -39,7 +31,8 @@ RUN mkdir -p /var/lib/softhsm/tokens && chown -R root:root /var/lib/softhsm
 # Provide an OpenSSL engine/provider config for PKCS#11 usage.
 # You can use it with: `openssl ... -config /etc/ssl/openssl-pkcs11.cnf`
 # or by exporting OPENSSL_CONF=/etc/ssl/openssl-pkcs11.cnf (not set by default).
-# Engine is kept for compatibility; OpenSSL 3 prefers providers, but this remains useful.
+# Engine is kept for compatibility with efitools
+
 ADD --chown=root:root <<'EOF' /etc/ssl/openssl-pkcs11.cnf
 openssl_conf = openssl_init
 
@@ -73,7 +66,7 @@ EOF
 #   TOKEN_LABEL   : Token label
 #   SO_PIN        : Security Officer PIN (init/reinit)
 #   USER_PIN      : User PIN (for normal operations)
-ARG TOKEN_LABEL=CI-Token
+ARG TOKEN_LABEL=UEFIKeys
 ARG SO_PIN=3537363231383830
 ARG USER_PIN=123456
 
