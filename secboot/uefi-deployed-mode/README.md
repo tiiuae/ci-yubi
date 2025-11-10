@@ -2,7 +2,14 @@
 
 git clone git@github.com:tiiuae/ci-yubi.git
 
-cd ci-yubi/secboot/uefi-deployed-mode/
+cd ci-yubi
+
+git checkout feature/uefi-deployed
+
+git pull origin feature/uefi-deployed
+
+cd secboot/uefi-deployed-mode
+
 
 ### Prepare the Shared Folder
 
