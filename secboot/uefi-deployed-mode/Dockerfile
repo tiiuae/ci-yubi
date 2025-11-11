@@ -152,7 +152,6 @@ VOLUME ["/var/lib/softhsm/tokens", "/opt/keys"]
 
 COPY ghaf_sign_iso.sh /root/
 COPY signme_offline.sh /root/
-COPY sbsign /root/
 
 COPY provision-uefi-auth.sh /root/
 COPY openssl-engine.cnf /root/
