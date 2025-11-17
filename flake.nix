@@ -73,21 +73,22 @@
               zstd
               systemdUkify
               openssl
-	      xorriso
-	      squashfsTools
-	      binutils
-	      findutils
+              xorriso
+              squashfsTools
+              binutils
+              findutils
+              dosfstools
             ])
             ++ [
               sbsignPkg
-	      uefisign
+              uefisign
             ];
           text = builtins.readFile ./secboot/ghaf_sign_iso.sh;
         };
 
         keygen = pkgs.writeShellApplication {
           name = "uefikeygen";
-          runtimeInputs = (with pkgs; [ openssl ]);
+          runtimeInputs = with pkgs; [ openssl ];
           text = ''
             set -euo pipefail
 
@@ -149,7 +150,7 @@
             sigver
             signmeScript
             uefisign
-	    uefisigniso
+            uefisigniso
             keygen
             ;
         };
@@ -176,9 +177,9 @@
           };
 
           uefisigniso = {
-	    type = "app";
-	    program ="${uefisigniso}/bin/uefisigniso";
-	  };
+            type = "app";
+            program = "${uefisigniso}/bin/uefisigniso";
+          };
 
           uefikeygen = {
             type = "app";
