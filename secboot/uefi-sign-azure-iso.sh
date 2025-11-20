@@ -18,7 +18,7 @@ echo "[*] Extracting ISO filesystem... from $ISO"
 xorriso -osirrox on -indev "$ISO" -extract / "$WORKDIR/iso_root"
 
 echo "[*] Fixing ownership of ISO tree..."
-chown -R $(id -u):$(id -g) "$WORKDIR/iso_root"
+chown -R "$(id -u):$(id -g)" "$WORKDIR/iso_root"
 
 # === COLLECT FILES ===
 echo "[*] Copy kernel, initrd, EFI image..."
@@ -39,11 +39,7 @@ echo "[*] UKI built."
 
 # === SIGN UKI ===
 echo "[*] Signing UKI..."
-#sbsign --key db.key --cert db.crt \
-#    --output "$WORKDIR/$SIGNED_UKI" "$WORKDIR/BOOTX64.EFI"
-#cp ../$SIGNED_UKI $WORKDIR/$SIGNED_UKI
-log "[DEBUG] Running: sbsign with params --key \"$KEY\" --cert \"$CERT\""
-sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$WORKDIR/$SIGNED_UKI" BOOTX64.EFI 2>&1 | tee /tmp/sbsign.log
+sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$WORKDIR/$SIGNED_UKI" "$WORKDIR/BOOTX64.EFI" 2>&1 | tee /tmp/sbsign.log
 ret=$?
 if [[ $ret -ne 0 ]]; then
     log "[!] sbsign failed (exit code $ret)"
@@ -70,10 +66,10 @@ xorriso -as mkisofs \
     -V 'nixos-minimal-25.11-x86_64' \
     -c isolinux/boot.cat \
     -b isolinux/isolinux.bin \
-      -no-emul-boot -boot-load-size 4 -boot-info-table \
+    -no-emul-boot -boot-load-size 4 -boot-info-table \
     -eltorito-alt-boot \
     -e boot/efi.img \
-      -no-emul-boot -isohybrid-gpt-basdat \
+    -no-emul-boot -isohybrid-gpt-basdat \
     -o "$FINAL_ISO" "$WORKDIR/iso_root"
 
 echo "[*] New signed ISO created: $FINAL_ISO"
