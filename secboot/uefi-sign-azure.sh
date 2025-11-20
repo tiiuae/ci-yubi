@@ -7,8 +7,7 @@
 # This script is expecting AZURE_CLI_ACCESS_TOKEN to be set
 # Otherwise (or in case of Azure VM) it will request it based on current az login info
 ######################################################################################
-set -euo pipefail
-
+set -eo pipefail
 
 log() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"
@@ -39,32 +38,32 @@ KEY="vault:ghaf-secureboot-testkv:uefi-signing-key"
 ZSTD_IMAGE="ghaf_0.0.1.raw.zst"
 
 if [ -z "$AZURE_CLI_ACCESS_TOKEN" ]; then
+    log "[DEBUG] querying Azure metadata server for access token..."
     export AZURE_CLI_ACCESS_TOKEN=$(curl -s \
-     'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://vault.azure.net' \
-     -H "Metadata: true" | jq -r .access_token)
+        'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://vault.azure.net' \
+        -H "Metadata: true" | jq -r .access_token)
 fi
-
 
 log "[DEBUG] cert: $1"
 log "[DEBUG] image: $2"
 log "[DEBUG] $# args remaining"
 
 case "$DISK_IMAGE_ZST" in
-    *.iso)
-	input_type="iso"
-	log "ISO Image detected"
-	log "PWD: $PWD"
-	./signiso.sh $2
-	exit 0
-	;;
-    *.zst)
-	input_type="zst"
-	log "ZST'ed Image detected"
-	;;
-    *)
-	log "Unsupported input file: $1" >&2
-	exit 1
-	;;
+*.iso)
+    input_type="iso"
+    log "ISO Image detected"
+    log "PWD: $PWD"
+    exec uefisign-azure-iso "$2"
+    exit 0
+    ;;
+*.zst)
+    input_type="zst"
+    log "ZST'ed Image detected"
+    ;;
+*)
+    log "Unsupported input file: $1" >&2
+    exit 1
+    ;;
 esac
 
 # Ensure required tools are available
@@ -142,6 +141,5 @@ else
     mkdir -p $SUBDIR
     mv $DISK_IMAGE_ISO $SUBDIR
 fi
-
 
 log "[+] EFI Signing Success!"

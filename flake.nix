@@ -7,15 +7,12 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.05";
     flake-utils.url = "github:numtide/flake-utils";
-
     sbsigntools.url = "github:tiiuae/sbsigntools";
     akvengine.url = "github:tiiuae/AzureKeyVaultManagedHSMEngine";
   };
 
   outputs =
     {
-      # deadnix: skip
-      self,
       nixpkgs,
       flake-utils,
       sbsigntools,
@@ -26,6 +23,9 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+
+        tii-sbsign = sbsigntools.packages.${system}.default;
+        akvenginePkg = akvengine.packages.${system}.default;
 
         pythonDependencies = with pkgs.python3Packages; [
           azure-identity
@@ -41,9 +41,6 @@
           propagatedBuildInputs = pythonDependencies;
         };
 
-        sbsignPkg = sbsigntools.packages.${system}.default;
-        akvenginePkg = akvengine.packages.${system}.default;
-
         uefisign = pkgs.writeShellApplication {
           name = "uefisign";
           runtimeInputs =
@@ -57,9 +54,9 @@
               openssl
             ])
             ++ [
-              sbsignPkg
+              tii-sbsign
             ];
-          text = builtins.readFile ./secboot/signme_offline.sh;
+          text = builtins.readFile ./secboot/uefi-sign.sh;
         };
 
         uefisigniso = pkgs.writeShellApplication {
@@ -80,25 +77,29 @@
               dosfstools
             ])
             ++ [
-              sbsignPkg
+              tii-sbsign
               uefisign
             ];
-          text = builtins.readFile ./secboot/ghaf_sign_iso.sh;
+          text = builtins.readFile ./secboot/uefi-sign-iso.sh;
         };
 
-        keygen = pkgs.writeShellApplication {
+        uefikeygen = pkgs.writeShellApplication {
           name = "uefikeygen";
           runtimeInputs = with pkgs; [ openssl ];
-          text = ''
-            set -euo pipefail
-
-            export CONF=${./secboot/conf}
-            exec ${./secboot}/keygen.sh "$@"
-          '';
+          runtimeEnv = {
+            CONF = "${./secboot/conf}";
+          };
+          text = builtins.readFile ./secboot/keygen.sh;
         };
 
-        signmeScript = pkgs.writeShellApplication {
-          name = "signme";
+        # only used as dependency of uefisign-azure
+        uefisign-azure-iso = pkgs.writeShellApplication {
+          name = "uefisign-azure-iso";
+          text = builtins.readFile ./secboot/uefi-sign-azure-iso.sh;
+        };
+
+        uefisign-azure = pkgs.writeShellApplication {
+          name = "uefisign-azure";
           runtimeInputs =
             (with pkgs; [
               util-linux # for fdisk, losetup, etc.
@@ -108,39 +109,43 @@
               systemdUkify
             ])
             ++ [
-              sbsignPkg # from flake inputs
-              akvenginePkg # from flake inputs
+              tii-sbsign
+              akvenginePkg
+              uefisign-azure-iso
             ];
 
+          runtimeEnv = {
+            OPENSSL_CONF = toString (
+              pkgs.writeText "openssl_conf" ''
+                openssl_conf = openssl_init
+
+                [openssl_init]
+                engines = engine_section
+
+                [engine_section]
+                akv = akv_section
+
+                [akv_section]
+                engine_id = akv
+                dynamic_path = ${akvenginePkg}/lib/engines-3/e_akv.so
+                init = 1
+              ''
+            );
+          };
+
           text = ''
-            set -euo pipefail
-
-            tmpconf=$(mktemp)
-            cat > "$tmpconf" <<EOF
-            openssl_conf = openssl_init
-
-            [openssl_init]
-            engines = engine_section
-
-            [engine_section]
-            akv = akv_section
-
-            [akv_section]
-            engine_id = akv
-            dynamic_path = ${akvenginePkg}/lib/engines-3/e_akv.so
-            init = 1
-            EOF
-
-            export OPENSSL_CONF="$tmpconf"
-            exec ${./secboot/signme.sh} ${./secboot/uefi-signing-cert.pem} "$@"
+            exec ${./secboot/uefi-sign-azure.sh} ${./secboot/uefi-signing-cert.pem} "$@"
           '';
         };
-
       in
       {
         devShells.default = pkgs.mkShell {
           name = "ci-yubi";
-          packages = pythonDependencies;
+          packages =
+            (with pkgs; [
+              azure-cli
+            ])
+            ++ pythonDependencies;
         };
 
         formatter = pkgs.nixfmt-tree;
@@ -148,10 +153,10 @@
         packages = {
           inherit
             sigver
-            signmeScript
             uefisign
             uefisigniso
-            keygen
+            uefikeygen
+            uefisign-azure
             ;
         };
 
@@ -159,31 +164,13 @@
           sign = {
             type = "app";
             program = "${sigver}/bin/sign";
+            meta.description = "Sign a file using Azure Keyvault";
           };
 
           verify = {
             type = "app";
             program = "${sigver}/bin/verify";
-          };
-
-          signme = {
-            type = "app";
-            program = "${signmeScript}/bin/signme";
-          };
-
-          uefisign = {
-            type = "app";
-            program = "${uefisign}/bin/uefisign";
-          };
-
-          uefisigniso = {
-            type = "app";
-            program = "${uefisigniso}/bin/uefisigniso";
-          };
-
-          uefikeygen = {
-            type = "app";
-            program = "${keygen}/bin/uefikeygen";
+            meta.description = "Verify a file using Azure Keyvault";
           };
         };
       }

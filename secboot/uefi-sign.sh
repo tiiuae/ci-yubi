@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 set -euo pipefail
-set -E  # make ERR traps fire in functions/subshells
+set -E # make ERR traps fire in functions/subshells
 
 log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"; }
 
@@ -40,14 +40,14 @@ log "[DEBUG] cert: $CERT"
 log "[DEBUG] key : $PKEY"
 
 case "$DISK_IMAGE_ZST" in
-  *.zst)
-    input_type="zst"
-    log "ZST'ed Image detected"
-    ;;
-  *)
-    log "Unsupported input file: $DISK_IMAGE_ZST" >&2
-    exit 1
-    ;;
+*.zst)
+  input_type="zst"
+  log "ZST'ed Image detected"
+  ;;
+*)
+  log "Unsupported input file: $DISK_IMAGE_ZST" >&2
+  exit 1
+  ;;
 esac
 
 if [[ "$input_type" == "zst" ]]; then
@@ -82,9 +82,9 @@ fat_path() {
 mcopy -n -i "$EFI_IMAGE" ::/loader/entries/*.conf "$TMPWDIR"/ 2>/dev/null || true
 
 entry_file="$(
-  find "$TMPWDIR" -maxdepth 1 -type f -name '*.conf' -print \
-  | LC_ALL=C sort \
-  | tail -n 1 || true
+  find "$TMPWDIR" -maxdepth 1 -type f -name '*.conf' -print |
+    LC_ALL=C sort |
+    tail -n 1 || true
 )"
 
 if [[ -z "${entry_file:-}" ]]; then
@@ -111,7 +111,7 @@ for i in "${!INITRD_REL[@]}"; do
 done
 
 # exact kernel cmdline (contains systemConfig= and init=)
-sed -n 's/^options[[:space:]]\+//p' "$entry_file" > "$TMPWDIR/cmdline"
+sed -n 's/^options[[:space:]]\+//p' "$entry_file" >"$TMPWDIR/cmdline"
 if [[ ! -s "$TMPWDIR/cmdline" ]]; then
   log "[!] No 'options' line in loader entry"
   exit 1
@@ -127,7 +127,7 @@ if [[ "${#INITRD_REL[@]}" -gt 0 ]]; then
   for r in "${INITRD_REL[@]}"; do
     base="$(basename "$r")"
     mcopy -o -i "$EFI_IMAGE" "::${r}" "$TMPWDIR/$base"
-    INITRD_ARGS+=( --initrd "$TMPWDIR/$base" )
+    INITRD_ARGS+=(--initrd "$TMPWDIR/$base")
   done
 else
   log "[*] No initrd lines in loader entry (OK for UKI if cmdline is complete)"
@@ -143,12 +143,12 @@ ukify build \
 log "[*] Signing the UKI image ..."
 
 if [[ "$PKEY" == pkcs11:* ]]; then
-    sbsign --engine pkcs11 --keyform engine \
-	   --key "$PKEY" \
-	   --cery "$CERT" \
-	   --output "$SIGNED_EFI" "$TMPWDIR/BOOTX64.EFI.uki"
+  sbsign --engine pkcs11 --keyform engine \
+    --key "$PKEY" \
+    --cert "$CERT" \
+    --output "$SIGNED_EFI" "$TMPWDIR/BOOTX64.EFI.uki"
 else
-    sbsign --keyform PEM --key "$PKEY" --cert "$CERT" --output "$SIGNED_EFI" "$TMPWDIR/BOOTX64.EFI.uki"
+  sbsign --keyform PEM --key "$PKEY" --cert "$CERT" --output "$SIGNED_EFI" "$TMPWDIR/BOOTX64.EFI.uki"
 fi
 
 UKI_DST_REL="/EFI/nixos/uki-signed.efi"
@@ -161,7 +161,7 @@ awk -v new="${UKI_DST_REL}" '
   /^linux[[:space:]]/ && !done { print "linux " new; done=1; next }
   /^initrd[[:space:]]/ { next }
   { print }
-' "$entry_file" > "$TMPWDIR/tmp_entry"
+' "$entry_file" >"$TMPWDIR/tmp_entry"
 
 log "[*] Updating loader entry to boot the UKI..."
 mcopy -o -i "$EFI_IMAGE" "$TMPWDIR/tmp_entry" "::/loader/entries/$(basename "$entry_file")"

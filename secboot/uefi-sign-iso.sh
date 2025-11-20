@@ -5,46 +5,67 @@
 #           squashfs-tools (unsquashfs/mksquashfs), zstd, awk, sed, strings, stat, tr
 
 set -euo pipefail
-log(){ printf "[%(%F %T)T] %s\n" -1 "$*"; }
-die(){ log "[!] $*"; exit 1; }
-is_needed(){ command -v "$1" >/dev/null 2>&1 || die "Missing tool: $1"; }
+log() { printf "[%(%F %T)T] %s\n" -1 "$*"; }
+die() {
+  log "[!] $*"
+  exit 1
+}
+is_needed() { command -v "$1" >/dev/null 2>&1 || die "Missing tool: $1"; }
 
 [[ $# -eq 4 ]] || die "Usage: $0 <db.crt> <db.key> <ghaf.iso> <out-dir>"
-CERT="$1"; PKEY="$2"; ISO_IN="$3"; OUTDIR="$4"
+CERT="$1"
+PKEY="$2"
+ISO_IN="$3"
+OUTDIR="$4"
 
 for b in xorriso mtype mdir mmd mcopy mkfs.vfat awk sed tr stat ukify unsquashfs mksquashfs zstd strings; do is_needed "$b"; done
 is_needed nix
 
 WORK="$(mktemp -d)"
-cleanup(){ chmod -R u+rwX "$WORK" >/dev/null 2>&1 || true; rm -rf "$WORK" >/dev/null 2>&1 || true; }
+cleanup() {
+  chmod -R u+rwX "$WORK" >/dev/null 2>&1 || true
+  rm -rf "$WORK" >/dev/null 2>&1 || true
+}
 trap cleanup EXIT
 
 export MTOOLSRC=/dev/null
 export MTOOLS_SKIP_CHECK=1
 
-fat_path(){ local p="${1//\\//}"; p="${p%\"}"; p="${p#\"}"; p="${p%\'}"; p="${p#\'}"; [[ "${p:0:1}" == "/" ]] || p="/$p"; p="${p//\/\//\/}"; printf '%s' "$p"; }
-esp_free_bytes(){ mdir -i "$1" :: 2>/dev/null | awk '/bytes free/ {gsub(/,/, "", $1); print $1; exit}'; }
-grow_esp_if_needed(){ # enlarge FAT file if not enough space
+fat_path() {
+  local p="${1//\\//}"
+  p="${p%\"}"
+  p="${p#\"}"
+  p="${p%\'}"
+  p="${p#\'}"
+  [[ "${p:0:1}" == "/" ]] || p="/$p"
+  p="${p//\/\//\/}"
+  printf '%s' "$p"
+}
+esp_free_bytes() { mdir -i "$1" :: 2>/dev/null | awk '/bytes free/ {gsub(/,/, "", $1); print $1; exit}'; }
+grow_esp_if_needed() { # enlarge FAT file if not enough space
   local img="$1" need_bytes="$2" free cur new tmp newimg
-  free=$(esp_free_bytes "$img"); free=${free:-0}
-  (( free >= need_bytes )) && return 0
+  free=$(esp_free_bytes "$img")
+  free=${free:-0}
+  ((free >= need_bytes)) && return 0
   cur=$(stat -c%s "$img")
-  local add=$(( need_bytes > free ? need_bytes - free : 0 ))
-  new=$(( cur + add + 64*1024*1024 ))
-  (( new < cur*2 )) && new=$(( cur*2 ))
+  local add=$((need_bytes > free ? need_bytes - free : 0))
+  new=$((cur + add + 64 * 1024 * 1024))
+  ((new < cur * 2)) && new=$((cur * 2))
   log "[*] ESP too small (free=${free}B need=${need_bytes}B). Rebuilding to ${new} bytes…"
   tmp="$(mktemp -d)"
   mcopy -s -n -i "$img" ::/* "$tmp"/ 2>/dev/null || true
-  newimg="${img}.new"; truncate -s "$new" "$newimg"
+  newimg="${img}.new"
+  truncate -s "$new" "$newimg"
   mkfs.vfat -F32 -n EFI "$newimg" >/dev/null
   # restore files only if anything was copied out (portable: no compgen)
   if [ -n "$(find "$tmp" -mindepth 1 -print -quit 2>/dev/null)" ]; then
     mcopy -s -n -i "$newimg" "$tmp"/* :: >/dev/null
   fi
-  mv -f "$newimg" "$img"; rm -rf "$tmp"
+  mv -f "$newimg" "$img"
+  rm -rf "$tmp"
 }
 
-parse_grub_menuentry(){ # prints: KERNEL \n INITRDS \n OPTS
+parse_grub_menuentry() { # prints: KERNEL \n INITRDS \n OPTS
   awk '
     BEGIN{inblk=0; got=0}
     /^[[:space:]]*menuentry[ \t]/{ if (!got){ inblk=1; kp=""; opts=""; init=""; next } }
@@ -60,16 +81,26 @@ parse_grub_menuentry(){ # prints: KERNEL \n INITRDS \n OPTS
   ' "$1"
 }
 
-find_raw_in_sqfs(){ # robust locate *.raw.zst inside squashfs
+find_raw_in_sqfs() { # robust locate *.raw.zst inside squashfs
   local sqfs="$1" rel ec
   if command -v timeout >/dev/null 2>&1; then
-    rel="$( set +e; timeout 60s unsquashfs -l "$sqfs" 2> "$WORK/unsq.err" | awk '$NF ~ /\.raw\.zst$/ {print $NF; exit}'; echo "EC=$?" )"
+    rel="$(
+      set +e
+      timeout 60s unsquashfs -l "$sqfs" 2>"$WORK/unsq.err" | awk '$NF ~ /\.raw\.zst$/ {print $NF; exit}'
+      echo "EC=$?"
+    )"
   else
-    rel="$( set +e; unsquashfs -l "$sqfs" 2> "$WORK/unsq.err" | awk '$NF ~ /\.raw\.zst$/ {print $NF; exit}'; echo "EC=$?" )"
+    rel="$(
+      set +e
+      unsquashfs -l "$sqfs" 2>"$WORK/unsq.err" | awk '$NF ~ /\.raw\.zst$/ {print $NF; exit}'
+      echo "EC=$?"
+    )"
   fi
   #shellcheck disable=SC2034
-  ec="${rel##*EC=}"; rel="${rel%EC=*}"
-  rel="${rel#./}"; rel="${rel#squashfs-root/}"
+  ec="${rel##*EC=}"
+  rel="${rel%EC=*}"
+  rel="${rel#./}"
+  rel="${rel#squashfs-root/}"
   printf '%s' "$rel"
 }
 
@@ -86,7 +117,8 @@ log "[*] ISO label: $ISO_LABEL"
 
 # ===== PHASE 1: Installer UKI =====
 [[ -f "$WORK/iso_root/boot/efi.img" ]] || die "ESP not found at /boot/efi.img"
-cp "$WORK/iso_root/boot/efi.img" "$WORK/esp.img"; chmod +w "$WORK/esp.img"
+cp "$WORK/iso_root/boot/efi.img" "$WORK/esp.img"
+chmod +w "$WORK/esp.img"
 
 # Source GRUB config to discover kernel/initrd and options
 SRC_CFG=""
@@ -94,7 +126,7 @@ if [[ -f "$WORK/iso_root/boot/grub/grub.cfg" ]]; then
   SRC_CFG="$WORK/iso_root/boot/grub/grub.cfg"
 else
   SRC_CFG="$WORK/grub.esp.cfg"
-  mtype -i "$WORK/esp.img" ::/EFI/BOOT/grub.cfg | tr -d '\r' > "$SRC_CFG" || true
+  mtype -i "$WORK/esp.img" ::/EFI/BOOT/grub.cfg | tr -d '\r' >"$SRC_CFG" || true
 fi
 log "[*] Parsing GRUB config: $SRC_CFG"
 
@@ -113,8 +145,10 @@ KPATH="$(fat_path "$KPATH")"
 
 # Build clean cmdline for UKI
 OPTS="${OPTS:-}"
-OPTS="$(printf '%s' "$OPTS" | sed -E 's/\$\{?isoboot\}?//g')"    # drop ${isoboot}
-OPTS="$(printf '%s' "$OPTS" | sed -E 's/(^|[[:space:]])root=[^[:space:]]+//g')" # remove old root=
+# Drop ${isoboot}
+OPTS="$(printf '%s' "$OPTS" | sed -E 's/\$\{?isoboot\}?//g')"
+# Remove old root=
+OPTS="$(printf '%s' "$OPTS" | sed -E 's/(^|[[:space:]])root=[^[:space:]]+//g')"
 OPTS="$(printf '%s root=/dev/disk/by-label/%s rootfstype=iso9660' "$OPTS" "$ISO_LABEL")"
 OPTS="$(printf '%s' "$OPTS" | sed -E 's/[[:space:]]+/ /g; s/^[ ]+|[ ]+$//g')"
 
@@ -131,11 +165,12 @@ if [[ -n "${INITRDS:-}" ]]; then
   for r in "${arr[@]}"; do
     r="$(fat_path "$r")"
     [[ -f "$WORK/iso_root$r" ]] || die "initrd not found: $r"
-    base="$(basename "$r")"; cp "$WORK/iso_root$r" "$WORK/$base"
-    INITRD_ARGS+=( --initrd "$WORK/$base" )
+    base="$(basename "$r")"
+    cp "$WORK/iso_root$r" "$WORK/$base"
+    INITRD_ARGS+=(--initrd "$WORK/$base")
   done
 fi
-printf '%s\n' "$OPTS" > "$WORK/cmdline.txt"
+printf '%s\n' "$OPTS" >"$WORK/cmdline.txt"
 
 log "[*] Building installer UKI…"
 ukify build --linux "$WORK/bzImage.efi" "${INITRD_ARGS[@]}" --cmdline @"$WORK/cmdline.txt" --output "$WORK/BOOTX64.EFI"
@@ -145,15 +180,15 @@ log "[*] Signing installer UKI…"
 #  github:tiiuae/sbsigntools -- \
 
 if [[ "$PKEY" == pkcs11:* ]]; then
-    sbsign --engine pkcs11 --keyform engine \
-	   --key "$PKEY" \
-	   --cery "$CERT" \
-	   --output "$WORK/BOOTX64.EFI.signed" "$WORK/BOOTX64.EFI"
+  sbsign --engine pkcs11 --keyform engine \
+    --key "$PKEY" \
+    --cert "$CERT" \
+    --output "$WORK/BOOTX64.EFI.signed" "$WORK/BOOTX64.EFI"
 else
-    sbsign --keyform PEM --key "$PKEY" --cert "$CERT" --output "$WORK/BOOTX64.EFI.signed" "$WORK/BOOTX64.EFI"
+  sbsign --keyform PEM --key "$PKEY" --cert "$CERT" --output "$WORK/BOOTX64.EFI.signed" "$WORK/BOOTX64.EFI"
 fi
 
-NEED=$(( $(stat -c%s "$WORK/BOOTX64.EFI.signed") + 2*1024*1024 ))
+NEED=$(($(stat -c%s "$WORK/BOOTX64.EFI.signed") + 2 * 1024 * 1024))
 grow_esp_if_needed "$WORK/esp.img" "$NEED"
 
 log "[*] Installing UKI to \\EFI\\BOOT\\BOOTX64.EFI"
@@ -184,7 +219,8 @@ cp -f "$RAW_IN" "$EXPOSED_IN"
 log "[*] Exposed unsigned runtime image: $EXPOSED_IN"
 
 # Call your existing raw signer (flake) to inject signed UKI into the runtime image
-OUTDIR_RAW="$WORK/raw_out"; mkdir -p "$OUTDIR_RAW"
+OUTDIR_RAW="$WORK/raw_out"
+mkdir -p "$OUTDIR_RAW"
 log "[*] Signing runtime raw.zst via ci-yubi#uefisign…"
 uefisign "$CERT" "$PKEY" "$EXPOSED_IN" "$OUTDIR_RAW"
 
@@ -200,10 +236,11 @@ rm -f "$TARGET" || true
 install -m 0644 -D "$SIGNED_OUT" "$TARGET"
 
 # Mirror original squashfs compression
-COMP="xz"; BLK=""
+COMP="xz"
+BLK=""
 if unsquashfs -s "$WORK/store.squashfs" >/tmp/sqfs-info.$$ 2>/dev/null; then
   CLINE="$(sed -n 's/^Compression[[:space:]]\+//p' /tmp/sqfs-info.$$ | head -n1 || true)"
-  BLINE="$(sed -n 's/^Block size[[:space:]]\+//p'     /tmp/sqfs-info.$$ | head -n1 || true)"
+  BLINE="$(sed -n 's/^Block size[[:space:]]\+//p' /tmp/sqfs-info.$$ | head -n1 || true)"
   [[ -n "$CLINE" ]] && COMP="$(echo "$CLINE" | awk '{print tolower($1)}')"
   [[ -n "$BLINE" ]] && BLK="$BLINE"
   rm -f /tmp/sqfs-info.$$
