@@ -27,6 +27,18 @@
         tii-sbsign = sbsigntools.packages.${system}.default;
         akvenginePkg = akvengine.packages.${system}.default;
 
+        systemd-sbsign = pkgs.stdenv.mkDerivation {
+          name = "systemd-sbsign";
+          # noop unpackPhase as there is no $src aside of systemd
+          unpackPhase = "true";
+          buildInputs = [ pkgs.systemd ];
+          installPhase = ''
+            mkdir -p $out/bin
+            ln -s ${pkgs.systemd}/lib/systemd/systemd-sbsign $out/bin/systemd-sbsign
+          '';
+          meta.mainProgram = "systemd-sbsign";
+        };
+
         pythonDependencies = with pkgs.python3Packages; [
           azure-identity
           azure-keyvault-certificates
@@ -54,7 +66,7 @@
               openssl
             ])
             ++ [
-              tii-sbsign
+              systemd-sbsign
             ];
           text = builtins.readFile ./secboot/uefi-sign.sh;
         };
@@ -77,7 +89,7 @@
               dosfstools
             ])
             ++ [
-              tii-sbsign
+              systemd-sbsign
               uefisign
             ];
           text = builtins.readFile ./secboot/uefi-sign-iso.sh;

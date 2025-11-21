@@ -140,16 +140,28 @@ ukify build \
   --cmdline "@$TMPWDIR/cmdline" \
   --output "$TMPWDIR/BOOTX64.EFI.uki"
 
-log "[*] Signing the UKI image ..."
+# defaults
+PKEY_PROV="file"
+CERT_PROV="file"
 
 if [[ "$PKEY" == pkcs11:* ]]; then
-  sbsign --engine pkcs11 --keyform engine \
-    --key "$PKEY" \
-    --cert "$CERT" \
-    --output "$SIGNED_EFI" "$TMPWDIR/BOOTX64.EFI.uki"
-else
-  sbsign --keyform PEM --key "$PKEY" --cert "$CERT" --output "$SIGNED_EFI" "$TMPWDIR/BOOTX64.EFI.uki"
+  PKEY_PROV="provider:pkcs11"
+  log "[*] Interpreted private key as pkcs11 url"
 fi
+
+if [[ "$CERT" == pkcs11:* ]]; then
+  CERT_PROV="provider:pkcs11"
+  log "[*] Interpreted certificate as pkcs11 url"
+fi
+
+log "[*] Signing the UKI image ..."
+
+systemd-sbsign sign \
+  --private-key-source "$PKEY_PROV" \
+  --private-key "$PKEY" \
+  --certificate-source "$CERT_PROV" \
+  --certificate "$CERT" \
+  --output "$SIGNED_EFI" "$TMPWDIR/BOOTX64.EFI.uki"
 
 UKI_DST_REL="/EFI/nixos/uki-signed.efi"
 log "[*] Placing signed UKI at ${UKI_DST_REL} in the ESP..."
