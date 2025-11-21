@@ -175,18 +175,28 @@ printf '%s\n' "$OPTS" >"$WORK/cmdline.txt"
 log "[*] Building installer UKI…"
 ukify build --linux "$WORK/bzImage.efi" "${INITRD_ARGS[@]}" --cmdline @"$WORK/cmdline.txt" --output "$WORK/BOOTX64.EFI"
 
-log "[*] Signing installer UKI…"
-#nix run --accept-flake-config --option builders '' --option max-jobs 1 \
-#  github:tiiuae/sbsigntools -- \
+# defaults
+PKEY_PROV="file"
+CERT_PROV="file"
 
 if [[ "$PKEY" == pkcs11:* ]]; then
-  sbsign --engine pkcs11 --keyform engine \
-    --key "$PKEY" \
-    --cert "$CERT" \
-    --output "$WORK/BOOTX64.EFI.signed" "$WORK/BOOTX64.EFI"
-else
-  sbsign --keyform PEM --key "$PKEY" --cert "$CERT" --output "$WORK/BOOTX64.EFI.signed" "$WORK/BOOTX64.EFI"
+  PKEY_PROV="provider:pkcs11"
+  log "[*] Interpreted private key as pkcs11 url"
 fi
+
+if [[ "$CERT" == pkcs11:* ]]; then
+  CERT_PROV="provider:pkcs11"
+  log "[*] Interpreted certificate as pkcs11 url"
+fi
+
+log "[*] Signing installer UKI…"
+
+systemd-sbsign sign \
+  --private-key-source "$PKEY_PROV" \
+  --private-key "$PKEY" \
+  --certificate-source "$CERT_PROV" \
+  --certificate "$CERT" \
+  --output "$WORK/BOOTX64.EFI.signed" "$WORK/BOOTX64.EFI"
 
 NEED=$(($(stat -c%s "$WORK/BOOTX64.EFI.signed") + 2 * 1024 * 1024))
 grow_esp_if_needed "$WORK/esp.img" "$NEED"
