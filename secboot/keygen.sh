@@ -14,13 +14,6 @@ EOF
     exit 1
 fi
 
-if [[ -n "${CI_YUBI_ROOT:-}" ]]; then
-    ROOT="$CI_YUBI_ROOT/secboot"
-else
-    SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-    ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-fi
-
 TARGET="${1:-}"
 
 CONF="${CONF:-${PWD}/conf}"
