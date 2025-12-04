@@ -159,6 +159,7 @@ COPY demo.sh /root
 ENV OPENSSL_CONF=/root/openssl-engine.cnf
 RUN chmod +x /root/provision-uefi-auth.sh
 RUN chmod +x /root/demo.sh
+RUN chmod +x /root/ghaf_sign_iso.sh
 WORKDIR /root
 
 # Run the initializer at container start, then drop to a shell (override CMD in CI as needed)
