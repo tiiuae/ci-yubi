@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # sign_ghaf_iso_all.sh
 # Usage: ./sign_ghaf_iso_all.sh <db.crt> <db.key> <ghaf.iso> <out-dir>
-# Requires: xorriso, mtools (mtype,mdir,mmd,mcopy,mkfs.vfat), ukify, nix,
-#           squashfs-tools (unsquashfs/mksquashfs), zstd, awk, sed, strings, stat, tr
+# Requires: xorriso, mtools (mtype,mdir,mmd,mcopy,mkfs.vfat), ukify,
+#           awk, sed, stat, tr, systemd-sbsign, uefisign
 
 set -euo pipefail
+
 log() { printf "[%(%F %T)T] %s\n" -1 "$*"; }
 die() {
   log "[!] $*"
@@ -18,8 +19,9 @@ PKEY="$2"
 ISO_IN="$3"
 OUTDIR="$4"
 
-for b in xorriso mtype mdir mmd mcopy mkfs.vfat awk sed tr stat ukify unsquashfs mksquashfs zstd strings; do is_needed "$b"; done
-is_needed nix
+for b in xorriso mtype mdir mmd mcopy mkfs.vfat awk sed tr stat ukify systemd-sbsign uefisign; do
+  is_needed "$b"
+done
 
 WORK="$(mktemp -d)"
 cleanup() {
@@ -41,7 +43,11 @@ fat_path() {
   p="${p//\/\//\/}"
   printf '%s' "$p"
 }
-esp_free_bytes() { mdir -i "$1" :: 2>/dev/null | awk '/bytes free/ {gsub(/,/, "", $1); print $1; exit}'; }
+
+esp_free_bytes() {
+  mdir -i "$1" :: 2>/dev/null | awk '/bytes free/ {gsub(/,/, "", $1); print $1; exit}'
+}
+
 grow_esp_if_needed() { # enlarge FAT file if not enough space
   local img="$1" need_bytes="$2" free cur new tmp newimg
   free=$(esp_free_bytes "$img")
@@ -79,29 +85,6 @@ parse_grub_menuentry() { # prints: KERNEL \n INITRDS \n OPTS
     inblk && /^[[:space:]]*}/{ print kp; print init; print opts; got=1; exit }
     END{ exit got?0:1 }
   ' "$1"
-}
-
-find_raw_in_sqfs() { # robust locate *.raw.zst inside squashfs
-  local sqfs="$1" rel ec
-  if command -v timeout >/dev/null 2>&1; then
-    rel="$(
-      set +e
-      timeout 60s unsquashfs -l "$sqfs" 2>"$WORK/unsq.err" | awk '$NF ~ /\.raw\.zst$/ {print $NF; exit}'
-      echo "EC=$?"
-    )"
-  else
-    rel="$(
-      set +e
-      unsquashfs -l "$sqfs" 2>"$WORK/unsq.err" | awk '$NF ~ /\.raw\.zst$/ {print $NF; exit}'
-      echo "EC=$?"
-    )"
-  fi
-  #shellcheck disable=SC2034
-  ec="${rel##*EC=}"
-  rel="${rel%EC=*}"
-  rel="${rel#./}"
-  rel="${rel#squashfs-root/}"
-  printf '%s' "$rel"
 }
 
 # ---------- Extract ISO tree once ----------
@@ -208,27 +191,20 @@ timeout 30s mcopy -o -i "$WORK/esp.img" "$WORK/BOOTX64.EFI.signed" ::/EFI/BOOT/B
 chmod +w "$WORK/iso_root/boot/efi.img" 2>/dev/null || true
 cp "$WORK/esp.img" "$WORK/iso_root/boot/efi.img"
 
-# ===== PHASE 2: Signed runtime RAW in nix-store.squashfs =====
-[[ -f "$WORK/iso_root/nix-store.squashfs" ]] || die "nix-store.squashfs not found in ISO"
-cp -f "$WORK/iso_root/nix-store.squashfs" "$WORK/store.squashfs"
+# ===== PHASE 2: Signed runtime RAW in ISO filesystem =====
+# New layout: raw runtime image is on the ISO FS, not in nix-store.squashfs
 
-log "[*] Locating *.raw.zst inside nix-store.squashfs…"
-RAW_REL_PATH="$(find_raw_in_sqfs "$WORK/store.squashfs")"
-[[ -n "$RAW_REL_PATH" ]] || die "No *.raw.zst found inside squashfs (see $WORK/unsq.err)"
+RAW_ISO_REL="/ghaf-image/disk1.raw.zst"
+RAW_ISO_PATH="$WORK/iso_root$RAW_ISO_REL"
 
-log "[*] Extracting full store (this may take a bit)…"
-unsquashfs -d "$WORK/store_root" "$WORK/store.squashfs" >/dev/null
-chown -R "$(id -u)":"$(id -g)" "$WORK/store_root" || true
-chmod -R u+rwX "$WORK/store_root" || true
+[[ -f "$RAW_ISO_PATH" ]] || die "Runtime raw image not found at $RAW_ISO_REL in ISO"
 
-RAW_IN="$WORK/store_root/$RAW_REL_PATH"
-[[ -f "$RAW_IN" ]] || die "Expected path not found after extract: $RAW_IN"
+log "[*] Runtime raw image (ISO FS): $RAW_ISO_PATH"
 
-EXPOSED_IN="$WORK/$(basename "$RAW_IN")"
-cp -f "$RAW_IN" "$EXPOSED_IN"
+EXPOSED_IN="$WORK/$(basename "$RAW_ISO_PATH")"
+cp -f "$RAW_ISO_PATH" "$EXPOSED_IN"
 log "[*] Exposed unsigned runtime image: $EXPOSED_IN"
 
-# Call your existing raw signer (flake) to inject signed UKI into the runtime image
 OUTDIR_RAW="$WORK/raw_out"
 mkdir -p "$OUTDIR_RAW"
 log "[*] Signing runtime raw.zst via ci-yubi#uefisign…"
@@ -238,32 +214,11 @@ uefisign "$CERT" "$PKEY" "$EXPOSED_IN" "$OUTDIR_RAW"
 SIGNED_OUT="$(ls -1 "$OUTDIR_RAW"/*.raw.zst 2>/dev/null | head -n1 || true)"
 [[ -n "$SIGNED_OUT" && -f "$SIGNED_OUT" ]] || die "uefisign did not produce a *.raw.zst in $OUTDIR_RAW"
 
-log "[*] Replacing raw.zst inside store tree"
-TARGET="$WORK/store_root/$RAW_REL_PATH"
-chmod u+w "$(dirname "$TARGET")" || true
-chmod u+w "$TARGET" 2>/dev/null || true
-rm -f "$TARGET" || true
-install -m 0644 -D "$SIGNED_OUT" "$TARGET"
-
-# Mirror original squashfs compression
-COMP="xz"
-BLK=""
-if unsquashfs -s "$WORK/store.squashfs" >/tmp/sqfs-info.$$ 2>/dev/null; then
-  CLINE="$(sed -n 's/^Compression[[:space:]]\+//p' /tmp/sqfs-info.$$ | head -n1 || true)"
-  BLINE="$(sed -n 's/^Block size[[:space:]]\+//p' /tmp/sqfs-info.$$ | head -n1 || true)"
-  [[ -n "$CLINE" ]] && COMP="$(echo "$CLINE" | awk '{print tolower($1)}')"
-  [[ -n "$BLINE" ]] && BLK="$BLINE"
-  rm -f /tmp/sqfs-info.$$
-fi
-log "[*] Rebuilding nix-store.squashfs (comp=$COMP ${BLK:+block=$BLK})"
-SQFS_NEW="$WORK/nix-store.squashfs"
-if [[ -n "$BLK" ]]; then
-  mksquashfs "$WORK/store_root" "$SQFS_NEW" -noappend -comp "$COMP" -b "$BLK" >/dev/null
-else
-  mksquashfs "$WORK/store_root" "$SQFS_NEW" -noappend -comp "$COMP" >/dev/null
-fi
-
-cp -f "$SQFS_NEW" "$WORK/iso_root/nix-store.squashfs"
+log "[*] Replacing raw.zst in ISO filesystem at $RAW_ISO_REL"
+chmod u+w "$(dirname "$RAW_ISO_PATH")" || true
+chmod u+w "$RAW_ISO_PATH" 2>/dev/null || true
+rm -f "$RAW_ISO_PATH" || true
+install -m 0644 -D "$SIGNED_OUT" "$RAW_ISO_PATH"
 
 # ---------- Rebuild final ISO once ----------
 FINAL_ISO="signed-$(basename "${ISO_IN%.iso}").iso"
