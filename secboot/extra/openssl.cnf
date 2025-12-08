@@ -1,0 +1,24 @@
+openssl_conf = openssl_init
+
+[openssl_init]
+providers = provider_sect
+engines = engine_section
+
+[provider_sect]
+default = default_sect
+legacy = legacy_sect
+
+[default_sect]
+activate = 1
+
+[legacy_sect]
+activate = 1
+
+[engine_section]
+pkcs11 = pkcs11_sect
+
+[pkcs11_sect]
+engine_id = pkcs11
+MODULE_PATH = /nix/store/ki20py08nij2gmkds7bdmpf0wp07vky6-nethsm-pkcs11-2.0.0/lib/libnethsm_pkcs11.so
+dynamic_path = /nix/store/i7yzlkqzjlnpfskc4l3c8br6312645wy-libp11-0.4.16/lib/engines/pkcs11.so
+init = 1
