@@ -22,8 +22,8 @@ set -euo pipefail
 # ==========================================================
 
 # --- defaults ---
-MODULE="/nix/store/ki20py08nij2gmkds7bdmpf0wp07vky6-nethsm-pkcs11-2.0.0/lib/libnethsm_pkcs11.so"  # --module
-TOKEN_LABEL="NetHSM"                    # --token-label
+MODULE=""                                # --module
+TOKEN_LABEL="NetHSM"                     # --token-label
 PIN=""                                   # --pin (required)
 SLOT=""                                  # --slot (optional; auto-detect by token label)
 OUT="out"                                # --out
