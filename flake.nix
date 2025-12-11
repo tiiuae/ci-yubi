@@ -97,11 +97,22 @@
 
         uefikeygen = pkgs.writeShellApplication {
           name = "uefikeygen";
-          runtimeInputs = with pkgs; [ openssl ];
+          runtimeInputs = with pkgs; [
+            openssl
+          ];
           runtimeEnv = {
             CONF = "${./secboot/conf}";
           };
           text = builtins.readFile ./secboot/keygen.sh;
+        };
+
+        cert-to-auth = pkgs.writeShellApplication {
+          name = "cert-to-auth";
+          runtimeInputs = with pkgs; [
+            efitools
+            openssl
+          ];
+          text = builtins.readFile ./secboot/cert-to-auth.sh;
         };
 
         # only used as dependency of uefisign-azure
@@ -169,6 +180,7 @@
             uefisigniso
             uefikeygen
             uefisign-azure
+            cert-to-auth
             ;
         };
 
