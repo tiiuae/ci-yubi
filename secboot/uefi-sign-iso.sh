@@ -221,7 +221,7 @@ rm -f "$RAW_ISO_PATH" || true
 install -m 0644 -D "$SIGNED_OUT" "$RAW_ISO_PATH"
 
 # ---------- Rebuild final ISO once ----------
-FINAL_ISO="signed-$(basename "${ISO_IN%.iso}").iso"
+FINAL_ISO="signed_$(basename "${ISO_IN%.iso}").iso"
 log "[*] Rebuilding ISO (label: $ISO_LABEL)…"
 xorriso -as mkisofs \
   -iso-level 3 \

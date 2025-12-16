@@ -27,7 +27,7 @@ TMPWDIR="$(mktemp -d --suffix .uefisign)"
 DISK_IMAGE="$TMPWDIR/disk.raw"
 EFI_IMAGE="$TMPWDIR/efi-partition.img"
 SIGNED_EFI="$TMPWDIR/BOOTX64.EFI.signed"
-SIGNED_ZST="$OUTDIR/signed_ghaf_0.0.1.raw.zst"
+SIGNED_ZST="$OUTDIR/signed_$(basename "$DISK_IMAGE_ZST")"
 
 on_exit() {
   log "[DEBUG] Cleanup (TMPWDIR:$TMPWDIR)"
