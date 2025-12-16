@@ -59,10 +59,14 @@
             (with pkgs; [
               coreutils
               file
-            ]) ++ [ uefisignraw uefisigniso ];
+            ])
+            ++ [
+              uefisignraw
+              uefisigniso
+            ];
           text = builtins.readFile ./secboot/uefi-sign.sh;
         };
-        
+
         uefisignraw = pkgs.writeShellApplication {
           name = "uefisignraw";
           runtimeInputs =
