@@ -2,7 +2,7 @@
 # sign_ghaf_iso_all.sh
 # Usage: ./sign_ghaf_iso_all.sh <db.crt> <db.key> <ghaf.iso> <out-dir>
 # Requires: xorriso, mtools (mtype,mdir,mmd,mcopy,mkfs.vfat), ukify,
-#           awk, sed, stat, tr, systemd-sbsign, uefisign
+#           awk, sed, stat, tr, systemd-sbsign, uefisignraw
 
 set -euo pipefail
 
@@ -19,7 +19,7 @@ PKEY="$2"
 ISO_IN="$3"
 OUTDIR="$4"
 
-for b in xorriso mtype mdir mmd mcopy mkfs.vfat awk sed tr stat ukify systemd-sbsign uefisign; do
+for b in xorriso mtype mdir mmd mcopy mkfs.vfat awk sed tr stat ukify systemd-sbsign uefisignraw; do
   is_needed "$b"
 done
 
@@ -207,12 +207,12 @@ log "[*] Exposed unsigned runtime image: $EXPOSED_IN"
 
 OUTDIR_RAW="$WORK/raw_out"
 mkdir -p "$OUTDIR_RAW"
-log "[*] Signing runtime raw.zst via ci-yubi#uefisign…"
-uefisign "$CERT" "$PKEY" "$EXPOSED_IN" "$OUTDIR_RAW"
+log "[*] Signing runtime raw.zst via ci-yubi#uefisignraw…"
+uefisignraw "$CERT" "$PKEY" "$EXPOSED_IN" "$OUTDIR_RAW"
 
 # shellcheck disable=SC2012
 SIGNED_OUT="$(ls -1 "$OUTDIR_RAW"/*.raw.zst 2>/dev/null | head -n1 || true)"
-[[ -n "$SIGNED_OUT" && -f "$SIGNED_OUT" ]] || die "uefisign did not produce a *.raw.zst in $OUTDIR_RAW"
+[[ -n "$SIGNED_OUT" && -f "$SIGNED_OUT" ]] || die "uefisignraw did not produce a *.raw.zst in $OUTDIR_RAW"
 
 log "[*] Replacing raw.zst in ISO filesystem at $RAW_ISO_REL"
 chmod u+w "$(dirname "$RAW_ISO_PATH")" || true

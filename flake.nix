@@ -58,6 +58,16 @@
           runtimeInputs =
             (with pkgs; [
               coreutils
+              file
+            ]) ++ [ uefisignraw uefisigniso ];
+          text = builtins.readFile ./secboot/uefi-sign.sh;
+        };
+        
+        uefisignraw = pkgs.writeShellApplication {
+          name = "uefisignraw";
+          runtimeInputs =
+            (with pkgs; [
+              coreutils
               gawk
               util-linux
               mtools
@@ -68,7 +78,7 @@
             ++ [
               systemd-sbsign
             ];
-          text = builtins.readFile ./secboot/uefi-sign.sh;
+          text = builtins.readFile ./secboot/uefi-sign-raw.sh;
         };
 
         uefisigniso = pkgs.writeShellApplication {
@@ -90,7 +100,7 @@
             ])
             ++ [
               systemd-sbsign
-              uefisign
+              uefisignraw
             ];
           text = builtins.readFile ./secboot/uefi-sign-iso.sh;
         };
@@ -177,6 +187,7 @@
           inherit
             sigver
             uefisign
+            uefisignraw
             uefisigniso
             uefikeygen
             uefisign-azure
