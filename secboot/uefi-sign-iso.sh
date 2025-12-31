@@ -194,7 +194,7 @@ cp "$WORK/esp.img" "$WORK/iso_root/boot/efi.img"
 # ===== PHASE 2: Signed runtime RAW in ISO filesystem =====
 # New layout: raw runtime image is on the ISO FS, not in nix-store.squashfs
 
-RAW_ISO_REL="/ghaf-image/disk1.raw.zst"
+RAW_ISO_REL="/ghaf-image/ghaf-image.raw.zst"
 RAW_ISO_PATH="$WORK/iso_root$RAW_ISO_REL"
 
 [[ -f "$RAW_ISO_PATH" ]] || die "Runtime raw image not found at $RAW_ISO_REL in ISO"
