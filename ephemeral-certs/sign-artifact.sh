@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2022-2024 TII (SSRC) and the Ghaf contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# This script is expecting $P11MODULE to be set
 
 DATA="${1:?usage: $0 <artifact>}"
 
@@ -6,7 +10,7 @@ LABEL="ghaf-test-leaf" # Leaf certificate label
 #DATA="p11nethsm.conf"  # Data to be signed / timestamped
 
 # Create keypair
-pkcs11-tool   --module /nix/store/ki20py08nij2gmkds7bdmpf0wp07vky6-nethsm-pkcs11-2.0.0/lib/libnethsm_pkcs11.so  --keypairgen --key-type EC:prime256v1 --label "$LABEL"
+pkcs11-tool   --module  $P11MODULE  --keypairgen --key-type EC:prime256v1 --label "$LABEL"
 
 # Create CSR
 openssl req -new \

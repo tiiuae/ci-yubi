@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2022-2024 TII (SSRC) and the Ghaf contributors
+# SPDX-License-Identifier: Apache-2.0
+
 set -euo pipefail
 
 ARTIFACT="${1:?usage: $0 <artifact> <signature> <tsr> <leaf_cert> <tsa_ca> <our_ca>}"
