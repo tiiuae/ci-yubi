@@ -62,6 +62,76 @@ These keys are:
 Both `GhafInfraSignECP256` and `GhafInfraSignProv` are signed by the **GhafSLSAIntermEC256** intermediate CA, which chains to the offline Root CA.
 
 ---
+## CI signing implementation (current)
+
+The following excerpt illustrates how signing is currently performed in the CI pipeline
+during the **transition phase**.
+
+This implementation reflects the **current operational use of long-lived, HSM-protected
+signing keys**, while the ephemeral certificate model is under active development.
+
+The snippet is **illustrative**; the canonical source of truth is the GitHub repository.
+
+- **Pinned audit reference:**  
+  https://github.com/tiiuae/ghaf-infra/blob/04a9a35f0fd741e967c3af052118f16307b7377d/hosts/hetzci/pipelines/modules/utils.groovy#L115-L164
+- **Latest version:**  
+  https://github.com/tiiuae/ghaf-infra/blob/main/hosts/hetzci/pipelines/modules/utils.groovy
+
+```groovy
+// Signing stages
+// Skip signing stages in vm environment, where NetHSM is not available
+if (env.CI_ENV != 'vm') {
+  if (!it.no_image) {
+    stage("Sign image ${shortname}") {
+      def img_path = get_img_path(it.target, artifacts_local_dir)
+      sh """
+        mkdir -v -p "$(dirname "${artifacts_local_dir}/scs/${img_path}")"
+      """
+      lock('signing') {
+        sh """
+          openssl dgst -sha256 -sign \
+            "pkcs11:token=NetHSM;object=GhafInfraSignECP256" \
+            -out ${artifacts_local_dir}/scs/${img_path}.sig \
+            ${artifacts_local_dir}/${img_path}
+        """
+      }
+    }
+  }
+
+  stage("Sign provenance ${shortname}") {
+    lock('signing') {
+      sh """
+        openssl pkeyutl -sign -rawin \
+          -inkey "pkcs11:token=NetHSM;object=GhafInfraSignProv" \
+          -out ${artifacts_local_dir}/scs/${it.target}/provenance.json.sig \
+          -in ${artifacts_local_dir}/scs/${it.target}/provenance.json
+      """
+    }
+  }
+
+  if (it.get('uefisign', false) || it.get('uefisigniso', false)) {
+    stage("Sign UEFI ${shortname}") {
+      def diskPath = artifacts_local_dir + "/" + get_img_path(it.target, artifacts_local_dir)
+      def outdir = run_cmd("dirname '${diskPath}' | sed 's/${it.target}/uefisigned\\/${it.target}/'")
+      sh "mkdir -v -p ${outdir}"
+
+      lock('signing') {
+        sh "uefisign /etc/jenkins/keys/tempDBkey.pem 'pkcs11:token=NetHSM;object=tempDBkey' '${diskPath}' ${outdir}"
+      }
+
+      def keydir = "keys"
+      def keysLocation = "${outdir}/${keydir}"
+      sh """
+        cp -r -L /etc/jenkins/keys/secboot ${keysLocation}
+        chmod +w ${keysLocation}
+        cp -L /etc/jenkins/enroll-secureboot-keys.sh ${keysLocation}/enroll.sh
+        tar -cvf ${keysLocation}.tar -C ${outdir} ${keydir}
+      """
+    }
+  }
+}
+
+---
 
 ### Transition to ephemeral certificates
 
