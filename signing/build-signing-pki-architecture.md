@@ -306,8 +306,8 @@ Within the operational PKI, SLSA signing is isolated from all other use cases.
 
 ### SLSA Intermediate CA
 
-- Signed by the GhafCA Namespace CA
-- Lifetime: 5 years
+- Signed by the Root CA
+- Lifetime: 10 years
 - Issues only subordinate SLSA CAs
 - Revocable if compromise is suspected
 
