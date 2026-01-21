@@ -349,6 +349,46 @@ Certificate lifetime is limited to **per-build or maximum 24 hours**.
 
 ---
 
+### Ephemeral Certificate sample
+
+```
+[alextserepov@nethsm-gateway:~/eph]$ openssl x509 -in ghaf-test-leaf.pem -text -noout
+Certificate:
+    Data:
+        Version: 3 (0x2)
+        Serial Number:
+            61:47:d8:4f:b6:67:a3:38:dd:6f:4a:9e:fc:a3:a4:a3:67:0b:a4:44
+        Signature Algorithm: ED25519
+        Issuer: CN=GhafTest, C=FI, L=Tampere, ST=Tampere, O=Ghaf, OU=Test, emailAddress=aleksandr.tserepov-savolainen@unikie.com
+        Validity
+            Not Before: Jan 21 12:43:31 2026 GMT
+            Not After : Jan 21 12:44:31 2026 GMT
+        Subject: C=FI, ST=Tampere, L=Tampere, O=Ghaf, CN=Ghaf Infra Sign ED25519
+        Subject Public Key Info:
+            Public Key Algorithm: id-ecPublicKey
+                Public-Key: (256 bit)
+                pub:
+                    04:44:ff:fb:29:f0:1b:01:ba:3d:05:07:93:dd:58:
+                    30:48:ae:a4:2c:05:a2:c8:c9:85:fd:df:15:d0:d4:
+                    89:9d:4e:ed:46:a6:d1:fc:24:14:41:7f:8f:ef:06:
+                    ba:b0:f3:db:08:8f:d5:82:e9:49:fa:a3:cf:b6:ab:
+                    e2:c6:6e:f6:50
+                ASN1 OID: prime256v1
+                NIST CURVE: P-256
+        X509v3 extensions:
+            X509v3 Subject Key Identifier: 
+                B7:56:94:A2:68:65:E9:BC:95:F2:DA:1D:8F:BB:80:BC:FB:A6:6A:F7
+            X509v3 Authority Key Identifier: 
+                B0:53:DF:A9:9F:FD:97:6F:F7:D6:BF:42:34:9D:8E:C8:9C:0F:44:49
+    Signature Algorithm: ED25519
+    Signature Value:
+        00:d9:fa:ed:fc:47:a6:b2:42:24:c3:f5:76:8e:fc:56:63:1f:
+        ef:50:73:53:51:8b:e7:4d:83:f7:57:aa:95:d3:c8:d1:4b:f7:
+        08:ca:06:4c:ce:33:16:d5:fa:a2:45:bc:33:fd:a5:96:36:1c:
+        d2:b8:cf:8e:fc:8b:98:cf:b0:0c
+```
+
+---
 ## Signing infrastructure topology
 
 ### Physical and network separation
