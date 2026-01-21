@@ -62,6 +62,127 @@ These keys are:
 Both `GhafInfraSignECP256` and `GhafInfraSignProv` are signed by the **GhafSLSAIntermEC256** intermediate CA, which chains to the offline Root CA.
 
 ---
+
+### Certificate samples
+
+#### CAs
+
+```
+[alextserepov@nethsm-gateway:~/nethsm/ca2]$ openssl x509 -in Ghaf-RootCA-EC.pem -text -noout 
+Certificate:
+    Data:
+        Version: 3 (0x2)
+        Serial Number:
+            52:c6:50:53:17:e1:81:5e:f2:a2:9f:86:5b:f0:c5:72:ee:de:47:21
+        Signature Algorithm: ecdsa-with-SHA256
+        Issuer: C=FI, O=Ghaf, CN=Ghaf Root CA EC
+        Validity
+            Not Before: Nov 14 10:48:10 2025 GMT
+            Not After : Nov  9 10:48:10 2045 GMT
+        Subject: C=FI, O=Ghaf, CN=Ghaf Root CA EC
+        Subject Public Key Info:
+            Public Key Algorithm: id-ecPublicKey
+                Public-Key: (256 bit)
+                pub:
+                    04:ef:38:eb:66:fc:61:da:02:ae:1c:e9:1c:52:4c:
+                    f6:b0:96:61:ce:5e:c5:30:d6:f3:b9:ac:74:e9:fa:
+                    60:b9:fd:ab:14:36:00:84:a0:2a:0b:21:00:04:4b:
+                    13:be:84:3b:7d:1b:76:28:06:63:08:7f:9c:bc:96:
+                    81:f9:b9:1c:2a
+                ASN1 OID: prime256v1
+                NIST CURVE: P-256
+        X509v3 extensions:
+            X509v3 Basic Constraints: critical
+                CA:TRUE
+            X509v3 Key Usage: critical
+                Certificate Sign, CRL Sign
+            X509v3 Subject Key Identifier: 
+                96:D9:24:3C:4C:45:89:9A:BC:64:81:08:66:2D:91:39:24:14:8C:D0
+            X509v3 Authority Key Identifier: 
+                96:D9:24:3C:4C:45:89:9A:BC:64:81:08:66:2D:91:39:24:14:8C:D0
+    Signature Algorithm: ecdsa-with-SHA256
+    Signature Value:
+        30:45:02:21:00:96:54:76:bb:83:41:29:4f:e5:d6:a1:15:02:
+        fa:71:c6:7e:19:11:c8:81:43:e1:e4:75:8e:cc:10:b4:59:e0:
+        9f:02:20:34:8e:67:a8:4c:c7:ac:4c:b5:f7:dd:78:45:bb:c5:
+        1d:02:04:65:0a:d6:39:70:5d:0c:0b:17:fb:c3:f5:24:25
+
+[alextserepov@nethsm-gateway:~/nethsm/ca2]$ openssl x509 -in GhafSLSAIntermEC256.pem -text -noout 
+Certificate:
+    Data:
+        Version: 3 (0x2)
+        Serial Number: 1 (0x1)
+        Signature Algorithm: ecdsa-with-SHA256
+        Issuer: C=FI, O=Ghaf, CN=Ghaf Root CA EC
+        Validity
+            Not Before: Dec  1 21:56:44 2025 GMT
+            Not After : Nov 29 21:56:44 2035 GMT
+        Subject: CN=Ghaf, C=FI, L=Tampere, ST=Tampere, O=Ghaf, emailAddress=aleksandr.tserepov-savolainen@unikie.com
+        Subject Public Key Info:
+            Public Key Algorithm: id-ecPublicKey
+                Public-Key: (256 bit)
+                pub:
+                    04:66:e6:41:e0:2d:17:6d:7c:4c:10:4b:c1:6c:2f:
+                    6a:eb:b4:c2:50:b4:17:f5:56:7b:75:1e:18:0e:61:
+                    81:6b:a5:2d:4b:cb:78:f0:cd:b9:88:a2:9f:3b:96:
+                    97:fe:6d:d6:4f:4c:ad:ea:2a:44:d2:e2:20:55:d0:
+                    34:6f:5d:0b:62
+                ASN1 OID: prime256v1
+                NIST CURVE: P-256
+        X509v3 extensions:
+            X509v3 Subject Key Identifier: 
+                7F:10:E1:6D:A6:9A:DC:11:36:91:28:A5:BE:31:04:DF:D3:A0:64:CA
+            X509v3 Authority Key Identifier: 
+                96:D9:24:3C:4C:45:89:9A:BC:64:81:08:66:2D:91:39:24:14:8C:D0
+    Signature Algorithm: ecdsa-with-SHA256
+    Signature Value:
+        30:45:02:20:5c:4c:16:14:7f:d4:a6:46:c0:79:14:bc:c9:f3:
+        07:6f:1a:8f:65:a6:5f:c9:03:e3:e2:ca:97:f8:ff:93:cc:ef:
+        02:21:00:b2:4e:7a:4b:a9:c0:b7:d3:81:89:8f:20:ad:66:99:
+        9d:73:3a:fa:6f:8b:8d:68:71:48:8b:f0:c1:67:29:ac:8b
+
+```
+
+#### Long lived leaf
+
+```
+[alextserepov@nethsm-gateway:~/nethsm/ca2]$ openssl x509 -in leaf.pem -text -noout
+Certificate:
+    Data:
+        Version: 3 (0x2)
+        Serial Number:
+            61:6f:74:29:4a:3d:ab:f7:e3:78:b1:97:d5:c9:bd:82:31:22:5a:79
+        Signature Algorithm: ecdsa-with-SHA256
+        Issuer: CN=Ghaf, C=FI, L=Tampere, ST=Tampere, O=Ghaf, emailAddress=aleksandr.tserepov-savolainen@unikie.com
+        Validity
+            Not Before: Dec  2 09:30:56 2025 GMT
+            Not After : Dec  2 09:30:56 2026 GMT
+        Subject: CN=Ghaf, C=FI, L=Tampere, ST=Tampere, O=Ghaf, emailAddress=aleksandr.tserepov-savolainen@unikie.com
+        Subject Public Key Info:
+            Public Key Algorithm: id-ecPublicKey
+                Public-Key: (256 bit)
+                pub:
+                    04:d7:e8:21:83:c1:25:a1:bb:31:d2:37:c7:a0:65:
+                    b1:b3:1c:87:80:8f:7f:9c:fd:7f:e9:ff:9e:9d:44:
+                    5d:20:70:6a:d4:b3:9f:db:28:09:4a:15:27:d8:c6:
+                    62:9a:e0:71:8d:c6:d1:56:10:6f:7b:50:63:e9:fd:
+                    14:2e:6f:12:78
+                ASN1 OID: prime256v1
+                NIST CURVE: P-256
+        X509v3 extensions:
+            X509v3 Subject Key Identifier: 
+                74:83:E2:12:78:07:4D:CF:9A:41:82:10:96:87:4E:E7:96:CA:26:EE
+            X509v3 Authority Key Identifier: 
+                7F:10:E1:6D:A6:9A:DC:11:36:91:28:A5:BE:31:04:DF:D3:A0:64:CA
+    Signature Algorithm: ecdsa-with-SHA256
+    Signature Value:
+        30:46:02:21:00:bc:3e:57:ee:fb:ea:de:4e:27:ea:72:65:39:
+        f3:28:c8:db:64:51:b5:4c:32:ca:31:de:83:a5:3e:94:71:17:
+        b0:02:21:00:d9:35:27:20:2a:67:f4:89:5d:ec:ca:9d:ff:c6:
+        c5:35:7e:cc:08:02:63:59:36:44:80:59:a2:4c:eb:b7:8c:bd
+```
+
+---
 ## CI signing implementation (current)
 
 The following excerpt illustrates how signing is currently performed in the CI pipeline
