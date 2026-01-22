@@ -224,6 +224,8 @@ install -m 0644 -D "$SIGNED_OUT" "$RAW_ISO_PATH"
 FINAL_ISO="signed_$(basename "${ISO_IN%.iso}").iso"
 log "[*] Rebuilding ISO (label: $ISO_LABEL)…"
 xorriso -as mkisofs \
+  -R \
+  -J -joliet-long \
   -iso-level 3 \
   -V "$ISO_LABEL" \
   -c isolinux/boot.cat \
