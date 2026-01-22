@@ -67,6 +67,21 @@
           text = builtins.readFile ./secboot/uefi-sign.sh;
         };
 
+        uefisign-simple = pkgs.writeShellApplication {
+          name = "uefisign-simple";
+          runtimeInputs =
+            (with pkgs; [
+              coreutils
+              mtools
+              zstd
+              jq
+            ])
+            ++ [
+              systemd-sbsign
+            ];
+          text = builtins.readFile ./secboot/uefi-sign-simple.sh;
+        };
+
         uefisignraw = pkgs.writeShellApplication {
           name = "uefisignraw";
           runtimeInputs =
@@ -193,9 +208,11 @@
             uefisign
             uefisignraw
             uefisigniso
+            uefisign-simple
             uefikeygen
             uefisign-azure
             cert-to-auth
+            systemd-sbsign
             ;
         };
 
