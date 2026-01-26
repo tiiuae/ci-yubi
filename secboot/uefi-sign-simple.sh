@@ -66,6 +66,7 @@ sign_file() {
 }
 
 decompress_image "$DISK_IMAGE"
+chmod +w "$DISK_IMAGE"
 ESP_OFFSET="$(get_esp_offset)"
 
 # copy the bootloader
