@@ -72,6 +72,8 @@
           runtimeInputs =
             (with pkgs; [
               coreutils
+              gawk
+              util-linux
               mtools
               zstd
               jq
