@@ -37,7 +37,7 @@ openssl x509 -req \
 
 # List objects
 echo "---------------------------------------------------------------------"
-pkcs11-tool --module /nix/store/ki20py08nij2gmkds7bdmpf0wp07vky6-nethsm-pkcs11-2.0.0/lib/libnethsm_pkcs11.so \
+pkcs11-tool --module $P11MODULE \
 	    --list-objects
 echo "---------------------------------------------------------------------"
 
@@ -59,7 +59,7 @@ openssl ts -query \
 curl -H "Content-Type: application/timestamp-query" --data-binary @"$DATA.sig.tsq" https://freetsa.org/tsr > "$DATA.sig.tsr"
 
 # Delete keypair
-pkcs11-tool --module /nix/store/ki20py08nij2gmkds7bdmpf0wp07vky6-nethsm-pkcs11-2.0.0/lib/libnethsm_pkcs11.so  \
+pkcs11-tool --module $P11MODULE  \
 	    --delete-object \
 	    --type privkey \
 	    --label "$LABEL"
