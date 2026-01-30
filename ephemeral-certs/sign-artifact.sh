@@ -10,14 +10,14 @@ LABEL="ghaf-test-leaf" # Leaf certificate label
 #DATA="p11nethsm.conf"  # Data to be signed / timestamped
 
 # Create keypair
-pkcs11-tool   --module  $P11MODULE  --keypairgen --key-type EC:prime256v1 --label "$LABEL"
+pkcs11-tool --module "$P11MODULE" --keypairgen --key-type EC:prime256v1 --label "$LABEL"
 
 # Create CSR
 openssl req -new \
-  -provider pkcs11 -provider default \
-  -key "pkcs11:token=NetHSM;object=$LABEL" \
-  -out "$LABEL.csr" \
-  -subj "/C=FI/ST=Tampere/L=Tampere/O=Ghaf/CN=Ghaf Infra Sign ED25519"
+	-provider pkcs11 -provider default \
+	-key "pkcs11:token=NetHSM;object=$LABEL" \
+	-out "$LABEL.csr" \
+	-subj "/C=FI/ST=Tampere/L=Tampere/O=Ghaf/CN=Ghaf Infra Sign ED25519"
 
 # Sign CSR
 START=$(date -u +"%Y%m%d%H%M%SZ")
@@ -37,16 +37,16 @@ openssl x509 -req \
 
 # List objects
 echo "---------------------------------------------------------------------"
-pkcs11-tool --module $P11MODULE \
-	    --list-objects
+pkcs11-tool --module "$P11MODULE" \
+	--list-objects
 echo "---------------------------------------------------------------------"
 
 # Sign data
 openssl pkeyutl -sign -rawin \
-  -provider pkcs11 -provider default \
-  -inkey "pkcs11:token=NetHSM;object=$LABEL;type=private" \
-  -in  "$DATA" \
-  -out "$DATA.sig"
+	-provider pkcs11 -provider default \
+	-inkey "pkcs11:token=NetHSM;object=$LABEL;type=private" \
+	-in "$DATA" \
+	-out "$DATA.sig"
 
 # Timestamp signature
 openssl ts -query \
@@ -56,11 +56,10 @@ openssl ts -query \
 	-cert \
 	-out "$DATA.sig.tsq"
 
-curl -H "Content-Type: application/timestamp-query" --data-binary @"$DATA.sig.tsq" https://freetsa.org/tsr > "$DATA.sig.tsr"
+curl -H "Content-Type: application/timestamp-query" --data-binary @"$DATA.sig.tsq" https://freetsa.org/tsr >"$DATA.sig.tsr"
 
 # Delete keypair
-pkcs11-tool --module $P11MODULE  \
-	    --delete-object \
-	    --type privkey \
-	    --label "$LABEL"
-
+pkcs11-tool --module "$P11MODULE" \
+	--delete-object \
+	--type privkey \
+	--label "$LABEL"
