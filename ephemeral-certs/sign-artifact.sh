@@ -38,8 +38,8 @@ END=$(date -u -d "+10 minutes" +"%Y%m%d%H%M%SZ")
 
 openssl x509 -req \
 	-in "$CSR_FILE" \
-	-CA testRoot.pem \
-	-CAkey "pkcs11:token=NetHSM;object=testRoot;type=private" \
+	-CA ca/pki-out/intermediate-ca.pem \
+	-CAkey "pkcs11:token=NetHSM;object=ghaf-intermediate-ca;type=private" \
 	-CAcreateserial \
 	-out "$CRT_FILE" \
 	-not_before "$START" \
@@ -74,7 +74,6 @@ openssl ts -query \
 curl -H "Content-Type: application/timestamp-query" \
 	--data-binary @"$DATA.sig.tsq" \
 	--fail --show-error --max-time 15 \
-	--cacert "$TSA_CA" \
 	"$TSA_URL" >"$DATA.sig.tsr"
 
 # Delete keypair

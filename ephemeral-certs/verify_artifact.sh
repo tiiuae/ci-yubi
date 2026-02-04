@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+# Example usage:
+# ./verify_artifact.sh test test.sig test.sig.tsr ghaf-test-leaf.pem cacert.pem ca/pki-out/root-ca.pem ca/pki-out/intermediate-ca.pem
+
 ARTIFACT="${1:?usage: $0 ARTIFACT SIG TSR LEAF TSA_CA TRUST_ANCHOR [CHAIN]}"
 SIG="${2:?}"
 TSR="${3:?}"
@@ -15,23 +18,31 @@ CHAIN="${7:-}"        # optional: intermediates between leaf and trust anchor
 # 0) Verify leaf certificate chains to the pinned trust anchor
 # If TRUST_ANCHOR is a root, CHAIN should contain intermediates.
 # If TRUST_ANCHOR is the intermediate that signed the leaf, CHAIN can be empty.
+
+# Extract timestamp time as epoch seconds (example uses openssl output parsing)
+TSR_TIME_STR="$(openssl ts -reply -in "$TSR" -text | awk -F': ' '/Time stamp:/{print $2; exit}')"
+TSR_EPOCH="$(date -u -d "$TSR_TIME_STR" +%s)"
+
+echo "Step 0 - verify leaf cert chains pinning to trust anchor attime: $TSR_EPOCH"
+
 if [[ -n "$CHAIN" ]]; then
-	openssl verify -purpose any -CAfile "$TRUST_ANCHOR" -untrusted "$CHAIN" "$LEAF" >/dev/null
+	openssl verify -purpose any -CAfile "$TRUST_ANCHOR" -untrusted "$CHAIN" -attime "$TSR_EPOCH" "$LEAF" >/dev/null
 else
-	openssl verify -purpose any -CAfile "$TRUST_ANCHOR" "$LEAF" >/dev/null
+	openssl verify -purpose any -CAfile "$TRUST_ANCHOR" -attime "$TSR_EPOCH" "$LEAF" >/dev/null
 fi
 
 # Enforce leaf constraints
 # Require Code Signing EKU
-# openssl x509 -in "$LEAF" -noout -text | grep -q "Extended Key Usage" && \
-#   openssl x509 -in "$LEAF" -noout -text | grep -q "Code Signing"
+openssl x509 -in "$LEAF" -noout -text | grep -q "Extended Key Usage" && \
+   openssl x509 -in "$LEAF" -noout -text | grep -q "Code Signing"
 
+echo "Step 1 - Verify artifact signature using leaf's pubkey"
 # 1) Verify artifact signature using leaf public key
-openssl x509 -in "$LEAF" -pubkey -noout |
-	openssl pkeyutl -verify -rawin -pubin \
-		-sigfile "$SIG" \
-		-in "$ARTIFACT"
+openssl x509 -in "$LEAF" -pubkey -noout > leaf.pub.pem
 
+openssl dgst -sha256 -verify leaf.pub.pem -signature "$SIG" "$ARTIFACT"
+
+echo "Step 2 - Verify TSR"
 # 2) Verify TSR cryptographically (timestamp token signs the SIG)
 openssl ts -verify \
 	-in "$TSR" \
@@ -39,6 +50,7 @@ openssl ts -verify \
 	-CAfile "$TSA_CA" \
 	>/dev/null
 
+echo "Step 3 - Extract timestamp"
 # 3) Extract timestamp time (RFC3161 genTime)
 TS_TIME_STR=$(
 	openssl ts -reply -in "$TSR" -text 2>/dev/null |
