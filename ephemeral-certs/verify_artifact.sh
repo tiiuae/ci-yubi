@@ -38,9 +38,12 @@ openssl x509 -in "$LEAF" -noout -text | grep -q "Extended Key Usage" && \
 
 echo "Step 1 - Verify artifact signature using leaf's pubkey"
 # 1) Verify artifact signature using leaf public key
-openssl x509 -in "$LEAF" -pubkey -noout > leaf.pub.pem
+LEAF_PUB_PEM="$(mktemp -t leaf.pub.pem.XXXXXX)"
+trap 'rm -f "$LEAF_PUB_PEM"' EXIT
 
-openssl dgst -sha256 -verify leaf.pub.pem -signature "$SIG" "$ARTIFACT"
+openssl x509 -in "$LEAF" -pubkey -noout > "$LEAF_PUB_PEM"
+
+openssl dgst -sha256 -verify "$LEAF_PUB_PEM" -signature "$SIG" "$ARTIFACT"
 
 echo "Step 2 - Verify TSR"
 # 2) Verify TSR cryptographically (timestamp token signs the SIG)
