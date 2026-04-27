@@ -94,8 +94,13 @@ chown -R "$(id -u)":"$(id -g)" "$WORK/iso_root" || true
 chmod -R u+w "$WORK/iso_root" || true
 
 # Preserve original label
-ISO_LABEL="$(xorriso -indev "$ISO_IN" -pvd_info 2>/dev/null | sed -n 's/^Volume id[[:space:]]*:[[:space:]]*//p' | head -n1)"
-[[ -z "${ISO_LABEL:-}" ]] && ISO_LABEL="ghaf"
+ISO_LABEL="$(xorriso -indev "$ISO_IN" -pvd_info 2>&1 | awk -F"'" '/Volume id/ { print $2; exit }')"
+
+[[ -n "$ISO_LABEL" ]] || {
+  log "[!] Could not read ISO label from $ISO_IN"
+  exit 1
+}
+
 log "[*] ISO label: $ISO_LABEL"
 
 # ===== PHASE 1: Installer UKI =====
@@ -128,12 +133,6 @@ KPATH="$(fat_path "$KPATH")"
 
 # Build clean cmdline for UKI
 OPTS="${OPTS:-}"
-# Drop ${isoboot}
-OPTS="$(printf '%s' "$OPTS" | sed -E 's/\$\{?isoboot\}?//g')"
-# Remove old root=
-OPTS="$(printf '%s' "$OPTS" | sed -E 's/(^|[[:space:]])root=[^[:space:]]+//g')"
-OPTS="$(printf '%s root=/dev/disk/by-label/%s rootfstype=iso9660' "$OPTS" "$ISO_LABEL")"
-OPTS="$(printf '%s' "$OPTS" | sed -E 's/[[:space:]]+/ /g; s/^[ ]+|[ ]+$//g')"
 
 log "[*] Installer kernel: $KPATH"
 log "[*] Installer initrd(s): ${INITRDS:-<none>}"
