@@ -45,6 +45,8 @@
           azure-keyvault-keys
         ];
 
+        uefiRawImageLib = builtins.readFile ./secboot/uefi-raw-image-lib.sh;
+
         sigver = pkgs.python3Packages.buildPythonPackage {
           pname = "sigver";
           version = "git";
@@ -81,7 +83,7 @@
             ++ [
               systemd-sbsign
             ];
-          text = builtins.readFile ./secboot/uefi-sign-simple.sh;
+          text = uefiRawImageLib + "\n" + builtins.readFile ./secboot/uefi-sign-simple.sh;
         };
 
         uefisignraw = pkgs.writeShellApplication {
@@ -99,7 +101,7 @@
             ++ [
               systemd-sbsign
             ];
-          text = builtins.readFile ./secboot/uefi-sign-raw.sh;
+          text = uefiRawImageLib + "\n" + builtins.readFile ./secboot/uefi-sign-raw.sh;
         };
 
         uefisigniso = pkgs.writeShellApplication {
@@ -156,11 +158,15 @@
           name = "uefisign-azure";
           runtimeInputs =
             (with pkgs; [
+              coreutils
+              curl
+              jq
               util-linux # for fdisk, losetup, etc.
               mtools
               gawk
               xorriso
               systemdUkify
+              zstd
             ])
             ++ [
               tii-sbsign
@@ -188,7 +194,9 @@
           };
 
           text = ''
-            exec ${./secboot/uefi-sign-azure.sh} ${./secboot/uefi-signing-cert.pem} "$@"
+            export UEFISIGN_AZURE_CERT=${./secboot/uefi-signing-cert.pem}
+            ${uefiRawImageLib}
+            ${builtins.readFile ./secboot/uefi-sign-azure.sh}
           '';
         };
       in

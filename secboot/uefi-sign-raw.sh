@@ -13,6 +13,13 @@ err_report() {
 }
 trap 'err_report $LINENO' ERR
 
+if ! declare -F uefisign_find_efi_partition >/dev/null; then
+  SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  # shellcheck disable=SC1091
+  # shellcheck source=uefi-raw-image-lib.sh
+  source "$SCRIPT_DIR/uefi-raw-image-lib.sh"
+fi
+
 if [[ $# -ne 4 ]]; then
   log "[!] Usage: $0 <certificate> <private-key> <disk-image.zst> <out-dir>"
   exit 1
@@ -24,7 +31,6 @@ DISK_IMAGE_ZST="$3"
 OUTDIR="$4"
 
 TMPWDIR="$(mktemp -d --suffix .uefisign)"
-DISK_IMAGE="$TMPWDIR/disk.raw"
 EFI_IMAGE="$TMPWDIR/efi-partition.img"
 SIGNED_EFI="$TMPWDIR/BOOTX64.EFI.signed"
 SIGNED_ZST="$OUTDIR/signed_$(basename "$DISK_IMAGE_ZST")"
@@ -50,25 +56,14 @@ case "$DISK_IMAGE_ZST" in
   ;;
 esac
 
-if [[ "$input_type" == "zst" ]]; then
-  log "[*] Decompressing image: $DISK_IMAGE_ZST -> $DISK_IMAGE"
-  zstd -d "$DISK_IMAGE_ZST" -o "$DISK_IMAGE"
-fi
-log "[*] Disk image: $DISK_IMAGE"
-chmod 666 "$DISK_IMAGE" || true
-
 log "[*] Locating EFI partition offset and size..."
-read -r EFI_START SECTORS < <(fdisk -l "$DISK_IMAGE" | awk '$0 ~ /EFI / { print $2, $4 }')
-if [[ -z "${EFI_START:-}" || -z "${SECTORS:-}" ]]; then
-  log "[!] Could not determine EFI partition info from image"
-  exit 1
-fi
+read -r EFI_START SECTORS < <(uefisign_find_efi_partition "$DISK_IMAGE_ZST" "$input_type" "$TMPWDIR/partition-prefix.img")
 EFI_OFFSET=$((EFI_START * 512))
 EFI_SIZE=$((SECTORS * 512))
 log "[*] EFI offset: $EFI_OFFSET, size: $EFI_SIZE bytes"
 
 log "[*] Extracting EFI partition to $EFI_IMAGE..."
-dd if="$DISK_IMAGE" of="$EFI_IMAGE" bs=512 skip="$EFI_START" count="$SECTORS" status=none
+uefisign_extract_raw_range_to_file "$DISK_IMAGE_ZST" "$input_type" "$EFI_OFFSET" "$EFI_SIZE" "$EFI_IMAGE"
 
 fat_path() {
   # Convert backslashes to forward slashes, ensure leading slash
@@ -182,15 +177,8 @@ mcopy -o -i "$EFI_IMAGE" "$TMPWDIR/tmp_entry" "::/loader/entries/$(basename "$en
 log "[*] Updating fallback EFI/BOOT/BOOTX64.EFI ..."
 mcopy -o -i "$EFI_IMAGE" "$SIGNED_EFI" ::/EFI/BOOT/BOOTX64.EFI
 
-log "[*] Writing updated EFI partition back to disk image..."
-dd if="$EFI_IMAGE" of="$DISK_IMAGE" bs=512 seek="$EFI_START" conv=notrunc status=none
-
-log "[+] Signed image updated in $DISK_IMAGE"
-
 mkdir -p "$OUTDIR"
-if [[ "$input_type" == "zst" ]]; then
-  log "[*] Recompressing signed image to $SIGNED_ZST..."
-  zstd -f "$DISK_IMAGE" -o "$SIGNED_ZST"
-fi
+log "[*] Streaming signed image to $SIGNED_ZST..."
+uefisign_write_signed_raw_image "$DISK_IMAGE_ZST" "$input_type" "$EFI_IMAGE" "$EFI_OFFSET" "$EFI_SIZE" "$SIGNED_ZST" zst
 
 log "[+] EFI Signing Success!"

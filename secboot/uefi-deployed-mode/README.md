@@ -8,7 +8,7 @@ git checkout feature/uefi-deployed
 
 git pull origin feature/uefi-deployed
 
-cd secboot/uefi-deployed-mode
+cd secboot
 
 
 ### Prepare the Shared Folder
@@ -20,9 +20,11 @@ cp /path/to/your.iso out/
 
 ### Build the Docker image
 
-from uefi-deployed-mode folder, build the Docker image
+from the secboot folder, build the Docker image
 
-docker build --network=host  -t softhsm-secboot:latest .
+docker build --network=host \
+  -f uefi-deployed-mode/Dockerfile \
+  -t softhsm-secboot:latest .
 
 ### Run the Docker Container
 
