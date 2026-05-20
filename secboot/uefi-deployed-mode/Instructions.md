@@ -3,7 +3,12 @@
 ## Build SoftHSM Docker image
 
 ```
-docker build --network=host --build-arg TOKEN_LABEL=UEFI-Token --build-arg SO_PIN=3537363231383830 --build-arg USER_PIN=123456 -t softhsm-secboot:latest .
+docker build --network=host \
+  -f uefi-deployed-mode/Dockerfile \
+  --build-arg TOKEN_LABEL=UEFI-Token \
+  --build-arg SO_PIN=3537363231383830 \
+  --build-arg USER_PIN=123456 \
+  -t softhsm-secboot:latest .
 [+] Building 19.4s (12/12) FINISHED                                                       docker:default
  => [internal] load build definition from Dockerfile                                                0.0s
  => => transferring dockerfile: 5.24kB                                                              0.0s

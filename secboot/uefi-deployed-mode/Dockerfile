@@ -150,12 +150,13 @@ RUN chmod +x /usr/local/bin/init-softhsm.sh
 # Make token storage a volume so keys survive container restarts
 VOLUME ["/var/lib/softhsm/tokens", "/opt/keys"]
 
-COPY ghaf_sign_iso.sh /root/
-COPY signme_offline.sh /root/
+COPY uefi-deployed-mode/ghaf_sign_iso.sh /root/
+COPY uefi-deployed-mode/signme_offline.sh /root/
+COPY uefi-raw-image-lib.sh /
 
-COPY provision-uefi-auth.sh /root/
-COPY openssl-engine.cnf /root/
-COPY demo.sh /root
+COPY uefi-deployed-mode/provision-uefi-auth.sh /root/
+COPY uefi-deployed-mode/openssl-engine.cnf /root/
+COPY uefi-deployed-mode/demo.sh /root
 ENV OPENSSL_CONF=/root/openssl-engine.cnf
 RUN chmod +x /root/provision-uefi-auth.sh
 RUN chmod +x /root/demo.sh
