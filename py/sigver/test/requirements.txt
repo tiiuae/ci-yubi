@@ -1,0 +1,3 @@
+azure-identity
+azure-mgmt-monitor
+azure-mgmt-web
