@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2022-2024 TII (SSRC) and the Ghaf contributors
+# SPDX-License-Identifier: Apache-2.0
+# shellcheck shell=bash
+
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -114,14 +118,14 @@ pkcs11-tool --module "$P11MODULE" \
 
 
 # --- 8) Leaf BIN & PROV CSR
-echo "[*] Creatin Binary Leaf CSR -> $LEAF_BIN_CSR"
+echo "[*] Creating Binary Leaf CSR -> $LEAF_BIN_CSR"
 openssl req -new \
 	-provider pkcs11 -provider default \
 	-key "pkcs11:token=NetHSM;object=$LEAF_BIN_LABEL" \
 	-out "$LEAF_BIN_CSR" \
 	-subj "$LEAF_BIN_SUBJ"
 
-echo "[*] Creatin Provenance Leaf CSR -> $LEAF_PROV_CSR"
+echo "[*] Creating Provenance Leaf CSR -> $LEAF_PROV_CSR"
 openssl req -new \
 	-provider pkcs11 -provider default \
 	-key "pkcs11:token=NetHSM;object=$LEAF_PROV_LABEL" \
@@ -157,7 +161,7 @@ pkcs11-tool --module "$P11MODULE" \
   --keypairgen --key-type EC:ED25519 \
   --label "$LEAF_COSIGN_LABEL"
 
-echo "[*] Creatin cosign Leaf CSR -> $LEAF_PROV_CSR"
+echo "[*] Creating cosign Leaf CSR -> $LEAF_PROV_CSR"
 openssl req -new \
 	-provider pkcs11 -provider default \
         -key "pkcs11:token=NetHSM;object=$LEAF_COSIGN_LABEL" \
