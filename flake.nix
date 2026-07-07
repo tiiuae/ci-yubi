@@ -86,6 +86,17 @@
           text = uefiRawImageLib + "\n" + builtins.readFile ./secboot/uefi-sign-simple.sh;
         };
 
+        uefi-sign-sysupdate = pkgs.writeShellApplication {
+          name = "uefi-sign-sysupdate";
+          runtimeInputs = [
+            pkgs.python3
+            systemd-sbsign
+          ];
+          text = ''
+            exec ${pkgs.python3}/bin/python3 ${./secboot/uefi-sign-sysupdate.py} "$@"
+          '';
+        };
+
         uefisignraw = pkgs.writeShellApplication {
           name = "uefisignraw";
           runtimeInputs =
@@ -219,6 +230,7 @@
             uefisignraw
             uefisigniso
             uefisign-simple
+            uefi-sign-sysupdate
             uefikeygen
             uefisign-azure
             cert-to-auth
@@ -237,6 +249,12 @@
             type = "app";
             program = "${sigver}/bin/verify";
             meta.description = "Verify a file using Azure Keyvault";
+          };
+
+          uefi-sign-sysupdate = {
+            type = "app";
+            program = "${uefi-sign-sysupdate}/bin/uefi-sign-sysupdate";
+            meta.description = "Sign sysupdate UKIs and rehash sysupdate manifests";
           };
         };
       }
