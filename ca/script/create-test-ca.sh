@@ -61,6 +61,8 @@ UEFI_KEK_DIR="$UEFI_OUT_DIR/KEK"
 UEFI_DB_DIR="$UEFI_OUT_DIR/db"
 mkdir -p "$UEFI_PK_DIR" "$UEFI_KEK_DIR" "$UEFI_DB_DIR"
 
+UEFI_PK_CSR="$UEFI_PK_DIR/PK.csr"
+
 # --- Helper: PKCS#11 URIs ---
 ROOT_KEY_URI="pkcs11:token=${TOKEN_LABEL};object=${ROOT_LABEL};type=private"
 INT_KEY_URI="pkcs11:token=${TOKEN_LABEL};object=${INT_LABEL};type=private"
@@ -204,12 +206,23 @@ pkcs11-tool --module "$P11MODULE" \
 
 printf '%s\n' "$UEFI_PK_URI" > "$UEFI_PK_DIR/PK.uri"
 
-echo "[*] Creating UEFI PK self-signed certificate -> $UEFI_PK_DIR/PK.pem"
-openssl req -new -x509 -days "$UEFI_DAYS" \
+echo "[*] Creating UEFI PK CSR -> $UEFI_PK_CSR"
+openssl req -new \
   -provider pkcs11 -provider default \
   -key "$UEFI_PK_URI" \
-  -out "$UEFI_PK_DIR/PK.pem" \
+  -out "$UEFI_PK_CSR" \
   -config "$UEFI_CONF/create_PK_cert.ini"
+
+echo "[*] Signing UEFI PK certificate with Root CA -> $UEFI_PK_DIR/PK.pem"
+openssl x509 -req \
+  -in "$UEFI_PK_CSR" \
+  -provider pkcs11 -provider default \
+  -CA "$ROOT_CERT" \
+  -CAkey "$ROOT_KEY_URI" \
+  -CAcreateserial \
+  -out "$UEFI_PK_DIR/PK.pem" \
+  -days "$UEFI_DAYS" -sha256 \
+  -extfile "$ROOT_EXT"
 
 echo "[*] Creating UEFI KEK keypair in netHSM (label: $UEFI_KEK_LABEL)"
 pkcs11-tool --module "$P11MODULE" \
@@ -281,6 +294,7 @@ echo "    Binary Leaf CSR:      $LEAF_BIN_CSR"
 echo "    Provenance Leaf CSR:  $LEAF_PROV_CSR"
 echo "    cosign Leaf CSR:      $LEAF_COSIGN_CSR"
 echo "    UEFI PK cert:         $UEFI_PK_DIR/PK.pem"
+echo "    UEFI PK CSR:          $UEFI_PK_CSR"
 echo "    UEFI KEK cert:        $UEFI_KEK_DIR/KEK.pem"
 echo "    UEFI db cert:         $UEFI_DB_DIR/db.pem"
 echo "    UEFI PK URI:          $UEFI_PK_DIR/PK.uri"
