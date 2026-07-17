@@ -74,6 +74,7 @@
           runtimeInputs =
             (with pkgs; [
               coreutils
+              file
               gawk
               util-linux
               mtools
