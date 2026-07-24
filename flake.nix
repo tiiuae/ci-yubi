@@ -71,19 +71,8 @@
 
         uefisign-simple = pkgs.writeShellApplication {
           name = "uefisign-simple";
-          runtimeInputs =
-            (with pkgs; [
-              coreutils
-              gawk
-              util-linux
-              mtools
-              zstd
-              jq
-            ])
-            ++ [
-              systemd-sbsign
-            ];
-          text = uefiRawImageLib + "\n" + builtins.readFile ./secboot/uefi-sign-simple.sh;
+          runtimeInputs = [ uefisignraw ];
+          text = builtins.readFile ./secboot/uefi-sign-simple.sh;
         };
 
         uefi-sign-sysupdate = pkgs.writeShellApplication {
