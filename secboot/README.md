@@ -103,67 +103,24 @@ At this stage, you should have everything required to sign the image and enable 
 
 #### Signing the image
 
-Signing the image involves several steps which differ slightly depending on the image type. Ghaf is offering both installer image (ISO) and RAW disk image as ZSTD archive (RAW.ZST).
+The raw-image signer now produces a `systemd-boot + UKI` chain.
 
-##### Raw image signing
+For each loader entry it does one of two things:
 
-Assuming your image is named disk.raw.zst
+- If the entry already uses `efi`, it signs the referenced UKI and keeps the entry stable.
+- If the entry still uses `linux` + `initrd`, it builds a UKI, writes it to `/EFI/Linux/<entry>.efi`, and rewrites the entry to `efi /EFI/Linux/<entry>.efi`.
 
-Extract the raw image from zstd archive:
+In both cases `EFI/BOOT/BOOTX64.EFI` remains the signed `systemd-boot` binary, not the kernel payload.
 
-` zst -d disk.raw.zst -o disk.raw `
+The resulting ESP layout looks like this:
 
-Find EFI partition offset, size and extract EFI partition
-
-```sh
-read -r EFI_START SECTORS < <(fdisk -l disk.raw | awk '$0 ~ /EFI / { print $2, $4 }')
-EFI_OFFSET=$((EFI_START * 512))
-EFI_SIZE=$((SECTORS * 512))
-dd if=disk.raw of=efi-partition.img bs=512 skip="$EFI_START" count="$SECTORS" status=none
+```text
+EFI/BOOT/BOOTX64.EFI
+EFI/Linux/<entry>.efi
+loader/entries/<entry>.conf
 ```
 
-Extract BOOTX64.EFI
-
-`
-mcopy -i efi-partition.img ::EFI/BOOT/BOOTX64.EFI BOOTX64.EFI
-`
-
-Please note, that hardened images include UKI (Unified Kernel Image) by default. If you are willing to sign unhardened image, you would need to create UKI and replace BOOTX64.EFI on EFI partition with it. In case you are working with hardened image, please skip the following step:
-
-TODO: Add a paragraph on bzImage and initrd extraction from the raw image!!!
-TODO: Add a paragraph on ukify with offline keys
-
-
-```sh
-ukify build   \
---linux ../gficvxrnx7h89ydhih3cry080174dw2q-linux-6.13.3-bzImage.efi   \
---initrd ../hr7djwyl44qm53hbrd91xa9s77hjbhxc-initrd-linux-6.13.3-initrd.efi   \
---cmdline "intel_iommu=on,sm_on iommu=pt module_blacklist=i915,xe,snd_pcm acpi_backlight=vendor acpi_osi=linux vfio-pci.ids=8086:51f1,8086:a7a1,8086:519d,8086:51ca,8086:51a3,8086:51a4 console=tty0 root=fstab resume=/dev/disk/by-partlabel/disk-disk1-swap loglevel=4 audit=1"   \
---os-release /etc/os-release   \
---uname 6.13.3 \
---signing-engine pkcs11 \
---secureboot-private-key "pkcs11:model=NetHSM;manufacturer=Nitrokey%20GmbH;serial=unknown;token=LocalHSM;id=%64%62;object=db;type=private"   \
---secureboot-certificate /mnt/test/ghaf-secboot/ca/config/db.crt   \
---output BOOTX64.EFI
-```
-
-
-Sign it with DB private key
-
-(NOTE: if you have created UKI, this step is not needed, as the UKI image is signed by ukify)
-
-`
-nix run github:tiiuae/sbsigntools -- --keyform PEM --key db.key --cert db.crt --output signed.efi BOOTX64.EFI
-`
-
-Insert signed BOOTX64.EFI back into EFI image and update EFI partition on the disk image.
-
-```sh
-mcopy -o -i "$EFI_IMAGE" "$SIGNED_EFI" ::EFI/BOOT/BOOTX64.EFI
-dd if=efi-partition.img of=disk.raw bs=512 seek="$EFI_START" conv=notrunc status=none
-```
-
-After this you should have an image with signed UKI in disk.raw.
+The entry file name stays stable so `bootctl list --json` keeps reporting the same `id`, which the updater can pass unchanged to `bootctl unlink`.
 
 Please save your PK, KEK, and DB files in DER format on a FAT32-formatted USB drive. Then reboot your target test machine and press F1 during startup to enter the BIOS setup.
 
