@@ -72,13 +72,13 @@ log "[*] EFI offset: $EFI_OFFSET, size: $EFI_SIZE bytes"
 log "[*] Extracting EFI partition to $EFI_IMAGE..."
 uefisign_extract_raw_range_to_file "$DISK_IMAGE_ZST" "$input_type" "$EFI_OFFSET" "$EFI_SIZE" "$EFI_IMAGE"
 
-BOOTLOADER="$(mdir -i "$EFI_IMAGE" ::/EFI/BOOT/ | awk '/BOOTAA64|BOOTX64/ {print $1; exit}').EFI"
-if [[ -z "${BOOTLOADER:-}" || "$BOOTLOADER" == ".EFI" ]]; then
-  log "[!] Could not find fallback bootloader in EFI/BOOT"
+BOOTLOADER="/EFI/systemd/systemd-bootx64.efi"
+if ! mdir -i "$EFI_IMAGE" ::/EFI/systemd/ | awk '/systemd-bootx64\.efi/ {found=1} END{exit found?0:1}' >/dev/null 2>&1; then
+  log "[!] Could not find systemd-boot in EFI/systemd/systemd-bootx64.efi"
   exit 1
 fi
-log "[*] Using fallback bootloader: $BOOTLOADER"
-mcopy -i "$EFI_IMAGE" "::/EFI/BOOT/$BOOTLOADER" "$TMPWDIR/$BOOTLOADER"
+log "[*] Using systemd bootloader: $BOOTLOADER"
+mcopy -i "$EFI_IMAGE" "::$BOOTLOADER" "$TMPWDIR/systemd-bootx64.efi"
 
 mcopy -n -i "$EFI_IMAGE" ::/loader/entries/*.conf "$TMPWDIR"/ 2>/dev/null || true
 
@@ -183,11 +183,14 @@ sign_efi "$TMPWDIR/$UKI_BASENAME" "$SIGNED_UKI"
 log "[*] Placing signed UKI at ${UKI_DST_REL} in the ESP..."
 mcopy -o -i "$EFI_IMAGE" "$SIGNED_UKI" "::${UKI_DST_REL}"
 
-log "[*] Signing fallback bootloader ..."
-sign_efi "$TMPWDIR/$BOOTLOADER" "$SIGNED_BOOTLOADER"
+log "[*] Signing systemd-boot ..."
+sign_efi "$TMPWDIR/systemd-bootx64.efi" "$SIGNED_BOOTLOADER"
 
-log "[*] Updating fallback EFI/BOOT/$BOOTLOADER ..."
-mcopy -o -i "$EFI_IMAGE" "$SIGNED_BOOTLOADER" "::/EFI/BOOT/$BOOTLOADER"
+log "[*] Updating EFI/systemd/systemd-bootx64.efi ..."
+mcopy -o -i "$EFI_IMAGE" "$SIGNED_BOOTLOADER" "::$BOOTLOADER"
+
+log "[*] Updating fallback EFI/BOOT/BOOTX64.EFI ..."
+mcopy -o -i "$EFI_IMAGE" "$SIGNED_BOOTLOADER" "::/EFI/BOOT/BOOTX64.EFI"
 
 if [[ "$input_type" == "zst" ]]; then
   mkdir -p "$OUTDIR"
