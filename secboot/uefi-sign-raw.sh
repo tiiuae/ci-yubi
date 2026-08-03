@@ -96,7 +96,7 @@ fi
 log "[*] Using loader entry: $(basename "$entry_file")"
 
 entry_base="$(basename "$entry_file" .conf)"
-UKI_DST_REL="/EFI/Linux/${entry_base}.efi"
+UKI_DST_REL="/EFI/nixos/${entry_base}.efi"
 UKI_BASENAME="$(basename "$UKI_DST_REL")"
 
 EFI_REL="$(awk '/^efi[[:space:]]/{print $2; exit}' "$entry_file" || true)"

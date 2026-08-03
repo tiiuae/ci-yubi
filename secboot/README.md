@@ -108,7 +108,7 @@ The raw-image signer now produces a `systemd-boot + UKI` chain.
 For each loader entry it does one of two things:
 
 - If the entry already uses `efi`, it signs the referenced UKI and keeps the entry stable.
-- If the entry still uses `linux` + `initrd`, it builds a UKI, writes it to `/EFI/Linux/<entry>.efi`, and rewrites the entry to `efi /EFI/Linux/<entry>.efi`.
+- If the entry still uses `linux` + `initrd`, it builds a UKI, writes it to `/EFI/nixos/<entry>.efi`, and rewrites the entry to `efi /EFI/nixos/<entry>.efi`.
 
 In both cases `EFI/BOOT/BOOTX64.EFI` remains the signed `systemd-boot` binary, not the kernel payload.
 
@@ -116,7 +116,7 @@ The resulting ESP layout looks like this:
 
 ```text
 EFI/BOOT/BOOTX64.EFI
-EFI/Linux/<entry>.efi
+EFI/nixos/<entry>.efi
 loader/entries/<entry>.conf
 ```
 
