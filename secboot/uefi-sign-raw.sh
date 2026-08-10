@@ -32,7 +32,7 @@ OUTDIR="$4"
 
 TMPWDIR="$(mktemp -d --suffix .uefisign)"
 EFI_IMAGE="$TMPWDIR/efi-partition.img"
-SIGNED_BOOTLOADER="$TMPWDIR/BOOTX64.EFI.signed"
+SIGNED_BOOTLOADER="$TMPWDIR/BOOT.EFI.signed"
 SIGNED_UKI="$TMPWDIR/slot.efi.signed"
 SIGNED_ZST="$OUTDIR/signed_$(basename "$DISK_IMAGE_ZST")"
 
@@ -72,13 +72,16 @@ log "[*] EFI offset: $EFI_OFFSET, size: $EFI_SIZE bytes"
 log "[*] Extracting EFI partition to $EFI_IMAGE..."
 uefisign_extract_raw_range_to_file "$DISK_IMAGE_ZST" "$input_type" "$EFI_OFFSET" "$EFI_SIZE" "$EFI_IMAGE"
 
-BOOTLOADER="/EFI/systemd/systemd-bootx64.efi"
-if ! mdir -i "$EFI_IMAGE" ::/EFI/systemd/ | awk '/systemd-bootx64\.efi/ {found=1} END{exit found?0:1}' >/dev/null 2>&1; then
-  log "[!] Could not find systemd-boot in EFI/systemd/systemd-bootx64.efi"
+SYSTEMD_BOOT_NAME="$(mdir -i "$EFI_IMAGE" ::/EFI/systemd/ | awk 'tolower($0) ~ /systemd-boot[a-z0-9.-]*\.efi/ {print $1; exit}')"
+if [[ -z "${SYSTEMD_BOOT_NAME:-}" ]]; then
+  log "[!] Could not find systemd-boot in EFI/systemd/"
   exit 1
 fi
-log "[*] Using systemd bootloader: $BOOTLOADER"
-mcopy -i "$EFI_IMAGE" "::$BOOTLOADER" "$TMPWDIR/systemd-bootx64.efi"
+SYSTEMD_BOOT_PATH="/EFI/systemd/${SYSTEMD_BOOT_NAME}"
+BOOTLOADER_BASENAME="BOOT${SYSTEMD_BOOT_NAME#systemd-boot}"
+BOOTLOADER_BASENAME="${BOOTLOADER_BASENAME^^}"
+log "[*] Using systemd bootloader: $SYSTEMD_BOOT_PATH"
+mcopy -i "$EFI_IMAGE" "::$SYSTEMD_BOOT_PATH" "$TMPWDIR/systemd-boot.efi"
 
 # Copy loader entries from the ESP.
 mcopy -n -i "$EFI_IMAGE" ::/loader/entries/*.conf "$TMPWDIR"/ 2>/dev/null || true
@@ -197,13 +200,13 @@ systemd-sbsign sign \
   --private-key "$PKEY" \
   --certificate-source "$CERT_PROV" \
   --certificate "$CERT" \
-  --output "$SIGNED_BOOTLOADER" "$TMPWDIR/systemd-bootx64.efi"
+  --output "$SIGNED_BOOTLOADER" "$TMPWDIR/systemd-boot.efi"
 
-log "[*] Updating EFI/systemd/systemd-bootx64.efi ..."
-mcopy -o -i "$EFI_IMAGE" "$SIGNED_BOOTLOADER" "::$BOOTLOADER"
+log "[*] Updating EFI/systemd/${SYSTEMD_BOOT_NAME} ..."
+mcopy -o -i "$EFI_IMAGE" "$SIGNED_BOOTLOADER" "::$SYSTEMD_BOOT_PATH"
 
-log "[*] Updating fallback EFI/BOOT/BOOTX64.EFI ..."
-mcopy -o -i "$EFI_IMAGE" "$SIGNED_BOOTLOADER" "::/EFI/BOOT/BOOTX64.EFI"
+log "[*] Updating fallback EFI/BOOT/${BOOTLOADER_BASENAME} ..."
+mcopy -o -i "$EFI_IMAGE" "$SIGNED_BOOTLOADER" "::/EFI/BOOT/${BOOTLOADER_BASENAME}"
 
 mkdir -p "$OUTDIR"
 log "[*] Streaming signed image to $SIGNED_ZST..."

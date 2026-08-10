@@ -110,12 +110,12 @@ For each loader entry it does one of two things:
 - If the entry already uses `efi`, it signs the referenced UKI and keeps the entry stable.
 - If the entry still uses `linux` + `initrd`, it builds a UKI, writes it to `/EFI/nixos/<entry>.efi`, and rewrites the entry to `efi /EFI/nixos/<entry>.efi`.
 
-In both cases `EFI/BOOT/BOOTX64.EFI` remains the signed `systemd-boot` binary, not the kernel payload.
+In both cases `EFI/BOOT/BOOT*.EFI` remains the signed `systemd-boot` binary, not the kernel payload.
 
 The resulting ESP layout looks like this:
 
 ```text
-EFI/BOOT/BOOTX64.EFI
+EFI/BOOT/BOOT*.EFI
 EFI/nixos/<entry>.efi
 loader/entries/<entry>.conf
 ```
