@@ -76,8 +76,8 @@ esac
 
 TMPWDIR="$(mktemp -d --suffix .uefisign-azure)"
 EFI_IMAGE="$TMPWDIR/efi-partition.img"
-SIGNED_EFI="$TMPWDIR/BOOTX64.EFI.signed"
-BOOT_EFI="$TMPWDIR/BOOTX64.EFI"
+SIGNED_EFI="$TMPWDIR/BOOT.EFI.signed"
+BOOT_EFI="$TMPWDIR/bootloader.efi"
 
 on_exit() {
     log "[DEBUG] Cleanup (TMPWDIR:$TMPWDIR)"
@@ -102,13 +102,22 @@ log "[*] EFI offset: $EFI_OFFSET, size: $EFI_SIZE bytes"
 log "[*] Extracting EFI partition to $EFI_IMAGE..."
 uefisign_extract_raw_range_to_file "$DISK_IMAGE_ZST" "$input_type" "$EFI_OFFSET" "$EFI_SIZE" "$EFI_IMAGE"
 
-log "[*] Extracting BOOTX64.EFI..."
-if ! mcopy -i "$EFI_IMAGE" ::EFI/BOOT/BOOTX64.EFI "$BOOT_EFI"; then
-    log "[!] Failed to extract BOOTX64.EFI from EFI image"
+SYSTEMD_BOOT_NAME="$(mdir -i "$EFI_IMAGE" ::/EFI/systemd/ | awk 'tolower($0) ~ /systemd-boot[a-z0-9.-]*\.efi/ {print $1; exit}')"
+if [[ -z "${SYSTEMD_BOOT_NAME:-}" ]]; then
+    log "[!] Could not find systemd-boot in EFI/systemd/"
+    exit 1
+fi
+SYSTEMD_BOOT_PATH="/EFI/systemd/${SYSTEMD_BOOT_NAME}"
+BOOT_FALLBACK="BOOT${SYSTEMD_BOOT_NAME#systemd-boot}"
+BOOT_FALLBACK="${BOOT_FALLBACK^^}"
+
+log "[*] Extracting systemd bootloader..."
+if ! mcopy -i "$EFI_IMAGE" "::${SYSTEMD_BOOT_PATH}" "$BOOT_EFI"; then
+    log "[!] Failed to extract systemd-boot from EFI image"
     exit 1
 fi
 
-log "[*] Signing BOOTX64.EFI..."
+log "[*] Signing systemd-boot..."
 
 log "[DEBUG] Running: sbsign with params --key $KEY --cert $CERT --output $SIGNED_EFI"
 sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$SIGNED_EFI" "$BOOT_EFI" 2>&1 | tee /tmp/sbsign.log
@@ -119,9 +128,15 @@ if [[ $ret -ne 0 ]]; then
     exit $ret
 fi
 
-log "[*] Inserting signed BOOTX64.EFI back into EFI image..."
-if ! mcopy -o -i "$EFI_IMAGE" "$SIGNED_EFI" ::EFI/BOOT/BOOTX64.EFI; then
-    log "[!] Failed to insert signed BOOTX64.EFI"
+log "[*] Inserting signed systemd-boot back into EFI image..."
+if ! mcopy -o -i "$EFI_IMAGE" "$SIGNED_EFI" "::${SYSTEMD_BOOT_PATH}"; then
+    log "[!] Failed to insert signed systemd-boot"
+    exit 1
+fi
+
+log "[*] Updating fallback EFI/BOOT/$BOOT_FALLBACK..."
+if ! mcopy -o -i "$EFI_IMAGE" "$SIGNED_EFI" "::/EFI/BOOT/$BOOT_FALLBACK"; then
+    log "[!] Failed to insert signed fallback bootloader"
     exit 1
 fi
 

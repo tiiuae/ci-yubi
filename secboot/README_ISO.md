@@ -9,7 +9,7 @@ The script works in two phases in one run:
 1. Installer phase (ISO ESP)
  - Builds an UKI (Unified Kernel Image) from the EFI partition in the ISO and embeds a safe kernel cmdline (root by ISO label, rootfstype=iso9660).
  - Signs the UKI with provided DB key.
- - Replaces \EFI\BOOT\BOOTX64.EFI in the ISO's EFI System Partition (ESP) with the signed UKI (no shim, no Microsoft keys).
+  - Replaces \EFI\BOOT\BOOT*.EFI in the ISO's EFI System Partition (ESP) with the signed UKI (no shim, no Microsoft keys).
 
 2. Installed system phase (runtime RAW inside ISO)
  - Finds the compressed runtime disk image (*.raw.zst) embedded in the ISO (inside nix-store.squashfs).

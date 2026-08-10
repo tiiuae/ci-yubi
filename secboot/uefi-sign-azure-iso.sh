@@ -3,7 +3,7 @@ set -euo pipefail
 
 # === CONFIG ===
 ISO="$1"
-SIGNED_UKI=BOOTX64.EFI.signed
+SIGNED_UKI=
 FINAL_ISO=signed-ghaf.iso
 CERT="uefi-signing-cert.pem"
 KEY="vault:ghaf-secureboot-testkv:uefi-signing-key"
@@ -26,6 +26,8 @@ cp "$WORKDIR/iso_root/boot/nix/store/"*/bzImage "$WORKDIR/kernel"
 cp "$WORKDIR/iso_root/boot/nix/store/"*/initrd "$WORKDIR/initrd"
 cp "$WORKDIR/iso_root/boot/efi.img" "$WORKDIR/efi.img"
 chmod +w "$WORKDIR/efi.img"
+BOOT_EFI_NAME="$(mdir -i "$WORKDIR/efi.img" ::/EFI/BOOT/ | awk 'tolower($0) ~ /^boot[a-z0-9]+$/ {print $1; exit}').EFI"
+SIGNED_UKI="${BOOT_EFI_NAME}.signed"
 
 # === BUILD UKI ===
 echo "[*] Building UKI..."
@@ -34,12 +36,12 @@ ukify build \
     --initrd "$WORKDIR/initrd" \
     --cmdline "$CMDLINE" \
     --os-release /etc/os-release \
-    --output "$WORKDIR/BOOTX64.EFI"
+    --output "$WORKDIR/$BOOT_EFI_NAME"
 echo "[*] UKI built."
 
 # === SIGN UKI ===
 echo "[*] Signing UKI..."
-sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$WORKDIR/$SIGNED_UKI" "$WORKDIR/BOOTX64.EFI" 2>&1 | tee /tmp/sbsign.log
+sbsign --engine e_akv --keyform engine --key "$KEY" --cert "$CERT" --output "$WORKDIR/$SIGNED_UKI" "$WORKDIR/$BOOT_EFI_NAME" 2>&1 | tee /tmp/sbsign.log
 ret=$?
 if [[ $ret -ne 0 ]]; then
     log "[!] sbsign failed (exit code $ret)"
@@ -51,7 +53,7 @@ echo "[*] UKI signed."
 
 # === UPDATE EFI IMG ===
 echo "[*] Updating EFI image..."
-mcopy -o -i "$WORKDIR/efi.img" "$WORKDIR/$SIGNED_UKI" ::/EFI/BOOT/BOOTX64.EFI
+mcopy -o -i "$WORKDIR/efi.img" "$WORKDIR/$SIGNED_UKI" "::/EFI/BOOT/$BOOT_EFI_NAME"
 echo "[*] EFI image updated."
 
 # === UPDATE ISO TREE ===

@@ -44,6 +44,13 @@ fat_path() {
   printf '%s' "$p"
 }
 
+detect_boot_efi_name() {
+  local img="$1" boot
+  boot="$(mdir -i "$img" ::/EFI/BOOT/ 2>/dev/null | awk 'tolower($0) ~ /^boot[a-z0-9]+$/ {print $1; exit}')"
+  [[ -n "${boot:-}" ]] || die "Could not determine EFI/BOOT fallback filename"
+  printf '%s.EFI' "$boot"
+}
+
 esp_free_bytes() {
   mdir -i "$1" :: 2>/dev/null | awk '/bytes free/ {gsub(/,/, "", $1); print $1; exit}'
 }
@@ -107,6 +114,7 @@ log "[*] ISO label: $ISO_LABEL"
 [[ -f "$WORK/iso_root/boot/efi.img" ]] || die "ESP not found at /boot/efi.img"
 cp "$WORK/iso_root/boot/efi.img" "$WORK/esp.img"
 chmod +w "$WORK/esp.img"
+BOOT_EFI_NAME="$(detect_boot_efi_name "$WORK/esp.img")"
 
 # Source GRUB config to discover kernel/initrd and options
 SRC_CFG=""
@@ -155,7 +163,7 @@ fi
 printf '%s\n' "$OPTS" >"$WORK/cmdline.txt"
 
 log "[*] Building installer UKI…"
-ukify build --linux "$WORK/bzImage.efi" "${INITRD_ARGS[@]}" --cmdline @"$WORK/cmdline.txt" --output "$WORK/BOOTX64.EFI"
+ukify build --linux "$WORK/bzImage.efi" "${INITRD_ARGS[@]}" --cmdline @"$WORK/cmdline.txt" --output "$WORK/$BOOT_EFI_NAME"
 
 # defaults
 PKEY_PROV="file"
@@ -178,13 +186,13 @@ systemd-sbsign sign \
   --private-key "$PKEY" \
   --certificate-source "$CERT_PROV" \
   --certificate "$CERT" \
-  --output "$WORK/BOOTX64.EFI.signed" "$WORK/BOOTX64.EFI"
+  --output "$WORK/${BOOT_EFI_NAME}.signed" "$WORK/$BOOT_EFI_NAME"
 
-NEED=$(($(stat -c%s "$WORK/BOOTX64.EFI.signed") + 2 * 1024 * 1024))
+NEED=$(($(stat -c%s "$WORK/${BOOT_EFI_NAME}.signed") + 2 * 1024 * 1024))
 grow_esp_if_needed "$WORK/esp.img" "$NEED"
 
-log "[*] Installing UKI to \\EFI\\BOOT\\BOOTX64.EFI"
-timeout 30s mcopy -o -i "$WORK/esp.img" "$WORK/BOOTX64.EFI.signed" ::/EFI/BOOT/BOOTX64.EFI
+log "[*] Installing UKI to \\EFI\\BOOT\\${BOOT_EFI_NAME}"
+timeout 30s mcopy -o -i "$WORK/esp.img" "$WORK/${BOOT_EFI_NAME}.signed" "::/EFI/BOOT/${BOOT_EFI_NAME}"
 
 # Put ESP back into ISO tree
 chmod +w "$WORK/iso_root/boot/efi.img" 2>/dev/null || true
