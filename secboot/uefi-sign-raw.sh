@@ -167,6 +167,14 @@ else
 
   log "[*] Updating loader entry to boot the UKI..."
   mcopy -o -i "$EFI_IMAGE" "$TMPWDIR/tmp_entry" "::/loader/entries/$(basename "$entry_file")"
+
+  log "[*] Removing old kernel and initrd files..."
+  mrm -i "$EFI_IMAGE" "::${LINUX_REL}" 2>/dev/null || true
+  if [[ "${#INITRD_REL[@]}" -gt 0 ]]; then
+    for r in "${INITRD_REL[@]}"; do
+      mrm -i "$EFI_IMAGE" "::${r}" 2>/dev/null || true
+    done
+  fi
 fi
 
 # defaults
