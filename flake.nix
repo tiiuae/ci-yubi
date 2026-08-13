@@ -75,6 +75,14 @@
           text = builtins.readFile ./secboot/uefi-sign-simple.sh;
         };
 
+        uefisign-orin = pkgs.writeShellApplication {
+          name = "uefisign-orin";
+          runtimeInputs = [
+            systemd-sbsign
+          ];
+          text = uefiRawImageLib + "\n" + builtins.readFile ./secboot/uefi-sign-orin.sh;
+        };
+
         uefi-sign-sysupdate = pkgs.writeShellApplication {
           name = "uefi-sign-sysupdate";
           runtimeInputs = [
@@ -219,6 +227,7 @@
             uefisignraw
             uefisigniso
             uefisign-simple
+            uefisign-orin
             uefi-sign-sysupdate
             uefikeygen
             uefisign-azure
