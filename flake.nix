@@ -77,9 +77,18 @@
 
         uefisign-orin = pkgs.writeShellApplication {
           name = "uefisign-orin";
-          runtimeInputs = [
-            systemd-sbsign
-          ];
+          runtimeInputs =
+            (with pkgs; [
+              coreutils
+              gawk
+              util-linux
+              mtools
+              zstd
+              jq
+            ])
+            ++ [
+              systemd-sbsign
+            ];
           text = uefiRawImageLib + "\n" + builtins.readFile ./secboot/uefi-sign-orin.sh;
         };
 
