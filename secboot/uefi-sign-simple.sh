@@ -3,4 +3,5 @@
 # SPDX-License-Identifier: Apache-2.0
 
 set -euo pipefail
+printf '%s\n' "[WARN] uefisign-simple is deprecated; use uefisignraw instead" >&2
 exec uefisignraw "$@"
