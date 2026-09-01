@@ -46,8 +46,21 @@ fat_path() {
 
 detect_boot_efi_name() {
   local img="$1" boot
-  boot="$(mdir -i "$img" ::/EFI/BOOT/ 2>/dev/null | awk 'tolower($0) ~ /^boot[a-z0-9]+$/ {print $1; exit}')"
-  [[ -n "${boot:-}" ]] || die "Could not determine EFI/BOOT fallback filename"
+
+  boot="$(
+    mdir -i "$img" ::/EFI/BOOT/ 2>/dev/null |
+      awk '
+        tolower($1) ~ /^boot[a-z0-9]+$/ &&
+        tolower($2) == "efi" {
+          print $1
+          found=1
+        }
+        END {
+          exit !found
+        }
+      '
+  )" || die "Could not determine EFI/BOOT fallback filename"
+
   printf '%s.EFI' "$boot"
 }
 
@@ -115,6 +128,8 @@ log "[*] ISO label: $ISO_LABEL"
 cp "$WORK/iso_root/boot/efi.img" "$WORK/esp.img"
 chmod +w "$WORK/esp.img"
 BOOT_EFI_NAME="$(detect_boot_efi_name "$WORK/esp.img")"
+
+log "[*] BOOT_EFI_NAME: $BOOT_EFI_NAME"
 
 # Source GRUB config to discover kernel/initrd and options
 SRC_CFG=""
