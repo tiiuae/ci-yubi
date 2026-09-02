@@ -206,15 +206,12 @@ extract_target_stub_from_image() {
   root_image="$TMPWDIR/root-partition.img"
   debugfs_err="$TMPWDIR/debugfs-stub.err"
 
-  log "[*] Target EFI stub is not available on signing host."
-  log "[*] Looking for $stub_name inside target image..."
-
   read -r root_start root_sectors < <(
     find_linux_root_partition "$TMPWDIR/partition-prefix.img"
   )
 
   if [[ -z "${root_start:-}" || -z "${root_sectors:-}" ]]; then
-    log "[!] Could not locate Linux root partition"
+    log "[DEBUG] Could not locate Linux root partition"
     return 1
   fi
 
@@ -235,9 +232,6 @@ extract_target_stub_from_image() {
     "$root_size" \
     "$root_image"
 
-  #
-  # Find systemd outputs in /nix/store.
-  #
   mapfile -t SYSTEMD_CANDIDATES < <(
     debugfs -R 'ls -l /nix/store' "$root_image" 2>/dev/null |
       awk '{print $NF}' |
@@ -246,7 +240,8 @@ extract_target_stub_from_image() {
   )
 
   if [[ "${#SYSTEMD_CANDIDATES[@]}" -eq 0 ]]; then
-    log "[!] No systemd package found in target /nix/store"
+    log "[DEBUG] No systemd package found in target /nix/store"
+    rm -f -- "$root_image"
     return 1
   fi
 
@@ -258,11 +253,6 @@ extract_target_stub_from_image() {
     log "[DEBUG] Trying EFI stub:"
     log "[DEBUG]   $source_path"
 
-    #
-    # Do not trust debugfs's exit status alone. It may return success even when
-    # the requested path does not exist. Try the dump directly, then verify that
-    # a non-empty output file was actually created.
-    #
     debugfs \
       -R "dump $source_path $output" \
       "$root_image" \
@@ -280,57 +270,80 @@ extract_target_stub_from_image() {
       continue
     fi
 
-    log "[*] Extracted target EFI stub:"
+    log "[*] Found EFI stub in target image:"
     log "[*]   $source_path"
 
     if ! check_stub_arch "$output" "$arch"; then
-      log "[!] Extracted stub has wrong architecture"
+      log "[!] Target-image EFI stub has wrong architecture"
       rm -f -- "$output"
       continue
     fi
 
-    #
-    # We no longer need the large temporary root filesystem image.
-    #
     rm -f -- "$root_image" "$debugfs_err"
-
     return 0
   done
 
-  rm -f -- "$debugfs_err"
+  rm -f -- "$root_image" "$debugfs_err" "$output"
 
-  log "[!] Could not find $stub_name in target image"
   return 1
 }
 
 find_efi_stub() {
   local arch="$1"
-  local output="$2"
+  local extracted_stub="$TMPWDIR/linux${arch}.efi.stub"
+  local bundled_stub=""
 
-  local ukify
-  local ukify_real
-  local ukify_root
-  local host_stub
+  EFI_STUB=""
 
-  ukify="$(command -v ukify)"
-  ukify_real="$(readlink -f "$ukify")"
-  ukify_root="${ukify_real%%/bin/*}"
+  #
+  # 1. Prefer the EFI stub from the target image.
+  #
+  log "[*] Looking for target EFI stub in image..."
 
-  host_stub="$ukify_root/lib/systemd/boot/efi/linux${arch}.efi.stub"
+  if extract_target_stub_from_image "$arch" "$extracted_stub"; then
+    EFI_STUB="$extracted_stub"
 
-  if [[ -f "$host_stub" ]]; then
-    if check_stub_arch "$host_stub" "$arch"; then
-      log "[*] Using EFI stub from signing environment:"
-      log "[*]   $host_stub"
+    log "[*] Using EFI stub from target image:"
+    log "[*]   $EFI_STUB"
 
-      EFI_STUB="$host_stub"
+    return 0
+  fi
+
+  log "[*] EFI stub not found in target image."
+
+  #
+  # 2. Fall back to the stub bundled with ci-yubi.
+  #
+  if [[ -n "${UEFISIGN_STUB_DIR:-}" ]]; then
+    bundled_stub="${UEFISIGN_STUB_DIR}/linux${arch}.efi.stub"
+
+    log "[*] Trying bundled EFI stub:"
+    log "[*]   $bundled_stub"
+
+    if [[ -f "$bundled_stub" ]]; then
+      if ! check_stub_arch "$bundled_stub" "$arch"; then
+        log "[!] Bundled EFI stub has wrong architecture"
+        return 1
+      fi
+
+      EFI_STUB="$bundled_stub"
+
+      log "[*] Using bundled fallback EFI stub:"
+      log "[*]   $EFI_STUB"
+
       return 0
     fi
   fi
 
-  extract_target_stub_from_image "$arch" "$output"
+  log "[!] Could not find EFI stub for architecture '$arch'"
+  log "[!] Tried:"
+  log "[!]   target RAW image"
 
-  EFI_STUB="$output"
+  if [[ -n "${UEFISIGN_STUB_DIR:-}" ]]; then
+    log "[!]   ${UEFISIGN_STUB_DIR}/linux${arch}.efi.stub"
+  fi
+
+  return 1
 }
 
 log "[*] Locating EFI partition offset and size..."
@@ -460,9 +473,10 @@ log "[*] Target EFI architecture: $EFI_ARCH"
 
 EFI_STUB=""
 
-find_efi_stub \
-  "$EFI_ARCH" \
-  "$TMPWDIR/linux${EFI_ARCH}.efi.stub"
+EFI_ARCH="$(efi_arch_from_systemd_boot "$SYSTEMD_BOOT_NAME")"
+log "[*] Target EFI architecture: $EFI_ARCH"
+
+find_efi_stub "$EFI_ARCH"
 
 log "[*] Using EFI stub: $EFI_STUB"
 
