@@ -145,12 +145,43 @@ set +e
 IFS=$'\n' read -r KPATH INITRDS OPTS < <(parse_grub_menuentry "$SRC_CFG")
 rc=$?
 set -e
+
 if [[ $rc -ne 0 || -z "${KPATH:-}" || "$KPATH" = "/" ]]; then
-  # Fallback: first linux/initrd lines
-  KPATH="$(sed -n 's/^[[:space:]]*linux\(efi\)\{0,1\}[[:space:]]\+//p' "$SRC_CFG" | head -n1 | awk '{print $1}')"
-  OPTS="$(sed -n 's/^[[:space:]]*linux\(efi\)\{0,1\}[[:space:]]\+//p' "$SRC_CFG" | head -n1 | cut -d" " -f2-)"
-  INITRDS="$(sed -n 's/^[[:space:]]*initrd\(efi\)\{0,1\}[[:space:]]\+//p' "$SRC_CFG" | head -n1)"
+
+KPATH="$(
+  sed -n '
+    s/^[[:space:]]*linux\(efi\)\{0,1\}[[:space:]]\+//
+    t found
+    b
+    :found
+    p
+    q
+  ' "$SRC_CFG" | awk '{print $1}'
+)"
+
+OPTS="$(
+  sed -n '
+    s/^[[:space:]]*linux\(efi\)\{0,1\}[[:space:]]\+//
+    t found
+    b
+    :found
+    p
+    q
+  ' "$SRC_CFG" | cut -d" " -f2-
+)"
+
+INITRDS="$(
+  sed -n '
+    s/^[[:space:]]*initrd\(efi\)\{0,1\}[[:space:]]\+//
+    t found
+    b
+    :found
+    p
+    q
+  ' "$SRC_CFG"
+)"
 fi
+
 [[ -n "${KPATH:-}" ]] || die "Could not find linux line in GRUB config"
 KPATH="$(fat_path "$KPATH")"
 
