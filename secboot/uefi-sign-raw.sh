@@ -72,11 +72,26 @@ log "[*] EFI offset: $EFI_OFFSET, size: $EFI_SIZE bytes"
 log "[*] Extracting EFI partition to $EFI_IMAGE..."
 uefisign_extract_raw_range_to_file "$DISK_IMAGE_ZST" "$input_type" "$EFI_OFFSET" "$EFI_SIZE" "$EFI_IMAGE"
 
-SYSTEMD_BOOT_NAME="$(mdir -i "$EFI_IMAGE" ::/EFI/systemd/ | awk 'tolower($0) ~ /systemd-boot[a-z0-9.-]*\.efi/ {print $1; exit}')"
-if [[ -z "${SYSTEMD_BOOT_NAME:-}" ]]; then
-  log "[!] Could not find systemd-boot in EFI/systemd/"
-  exit 1
-fi
+SYSTEMD_BOOT_NAME="$(
+  mdir -i "$EFI_IMAGE" ::/EFI/systemd/ |
+    awk '
+      {
+        for (i = 1; i <= NF; i++) {
+          if (tolower($i) ~ /^systemd-boot[a-z0-9.-]*\.efi$/) {
+            name = $i
+          }
+        }
+      }
+      END {
+        if (name != "") {
+          print name
+          exit 0
+        }
+        exit 1
+      }
+    '
+)" || die "Could not find systemd-boot in EFI/systemd/"
+
 SYSTEMD_BOOT_PATH="/EFI/systemd/${SYSTEMD_BOOT_NAME}"
 BOOTLOADER_BASENAME="BOOT${SYSTEMD_BOOT_NAME#systemd-boot}"
 BOOTLOADER_BASENAME="${BOOTLOADER_BASENAME^^}"
