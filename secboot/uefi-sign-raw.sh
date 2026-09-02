@@ -200,9 +200,11 @@ extract_target_stub_from_image() {
   local stub_name
   local candidate
   local source_path
+  local debugfs_err
 
   stub_name="linux${arch}.efi.stub"
   root_image="$TMPWDIR/root-partition.img"
+  debugfs_err="$TMPWDIR/debugfs-stub.err"
 
   log "[*] Target EFI stub is not available on signing host."
   log "[*] Looking for $stub_name inside target image..."
@@ -220,10 +222,10 @@ extract_target_stub_from_image() {
   root_size=$((root_sectors * 512))
 
   log "[*] Root partition:"
-  log "[*]   start:  $root_start"
-  log "[*]   sectors:$root_sectors"
-  log "[*]   offset: $root_offset"
-  log "[*]   size:   $root_size"
+  log "[*]   start:   $root_start"
+  log "[*]   sectors: $root_sectors"
+  log "[*]   offset:  $root_offset"
+  log "[*]   size:    $root_size"
   log "[*] Temporarily extracting root partition (sparse)..."
 
   extract_sparse_raw_range \
@@ -234,7 +236,7 @@ extract_target_stub_from_image() {
     "$root_image"
 
   #
-  # List the Nix store and find systemd outputs.
+  # Find systemd outputs in /nix/store.
   #
   mapfile -t SYSTEMD_CANDIDATES < <(
     debugfs -R 'ls -l /nix/store' "$root_image" 2>/dev/null |
@@ -251,33 +253,51 @@ extract_target_stub_from_image() {
   for candidate in "${SYSTEMD_CANDIDATES[@]}"; do
     source_path="/nix/store/${candidate}/lib/systemd/boot/efi/${stub_name}"
 
-    if debugfs \
-      -R "stat $source_path" \
-      "$root_image" >/dev/null 2>&1
-    then
-      log "[*] Found target EFI stub:"
-      log "[*]   $source_path"
+    rm -f -- "$output" "$debugfs_err"
 
-      debugfs \
-        -R "dump -p $source_path $output" \
-        "$root_image" >/dev/null 2>&1
+    log "[DEBUG] Trying EFI stub:"
+    log "[DEBUG]   $source_path"
 
-      if [[ -s "$output" ]]; then
-        if ! check_stub_arch "$output" "$arch"; then
-          log "[!] Extracted stub has wrong architecture"
-          rm -f "$output"
-          continue
-        fi
+    #
+    # Do not trust debugfs's exit status alone. It may return success even when
+    # the requested path does not exist. Try the dump directly, then verify that
+    # a non-empty output file was actually created.
+    #
+    debugfs \
+      -R "dump $source_path $output" \
+      "$root_image" \
+      >/dev/null 2>"$debugfs_err" || true
 
-        #
-        # We no longer need the giant root partition.
-        #
-        rm -f "$root_image"
+    if [[ ! -s "$output" ]]; then
+      log "[DEBUG] Stub not present in this systemd output"
 
-        return 0
+      if [[ -s "$debugfs_err" ]]; then
+        while IFS= read -r line; do
+          log "[DEBUG] debugfs: $line"
+        done <"$debugfs_err"
       fi
+
+      continue
     fi
+
+    log "[*] Extracted target EFI stub:"
+    log "[*]   $source_path"
+
+    if ! check_stub_arch "$output" "$arch"; then
+      log "[!] Extracted stub has wrong architecture"
+      rm -f -- "$output"
+      continue
+    fi
+
+    #
+    # We no longer need the large temporary root filesystem image.
+    #
+    rm -f -- "$root_image" "$debugfs_err"
+
+    return 0
   done
+
+  rm -f -- "$debugfs_err"
 
   log "[!] Could not find $stub_name in target image"
   return 1
