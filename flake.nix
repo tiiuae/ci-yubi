@@ -114,6 +114,11 @@
               zstd
               systemdUkify
               openssl
+              e2fsprogs
+              file
+              gnugrep
+              gnused
+              findutils
             ])
             ++ [
               systemd-sbsign
