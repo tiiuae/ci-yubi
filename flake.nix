@@ -160,6 +160,7 @@
               binutils
               findutils
               dosfstools
+              bmaptool
             ])
             ++ [
               systemd-sbsign
