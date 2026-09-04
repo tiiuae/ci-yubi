@@ -166,7 +166,10 @@
               systemd-sbsign
               uefisignraw
             ];
-          text = builtins.readFile ./secboot/uefi-sign-iso.sh;
+          text =
+            uefiRawImageLib
+            + "\n"
+            + builtins.readFile ./secboot/uefi-sign-iso.sh;
         };
 
         uefikeygen = pkgs.writeShellApplication {

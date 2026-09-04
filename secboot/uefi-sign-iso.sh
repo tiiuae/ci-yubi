@@ -45,37 +45,67 @@ fat_path() {
 }
 
 regenerate_bmap() {
-  local image_zst="$1"
-  local bmap_out="$2"
-  local raw_tmp="$WORK/bmap-source.raw"
+    local signed_zst="$1"
+    local original_bmap="$2"
+    local bmap_out="$3"
 
-  rm -f -- "$raw_tmp" "$bmap_out"
+    local raw_tmp="$WORK/bmap-source.raw"
+    local signed_esp="$WORK/signed-runtime-esp.img"
 
-  log "[*] Decompressing signed RAW for bmap generation..."
+    rm -f -- "$raw_tmp" "$signed_esp" "$bmap_out"
 
-  zstd \
-    --decompress \
-    --force \
-    --sparse \
-    -o "$raw_tmp" \
-    -- "$image_zst"
+    log "[*] Reconstructing original sparse layout..."
 
-  [[ -s "$raw_tmp" ]] ||
-    die "Failed to materialize signed RAW for bmap generation"
+    #
+    # Preserve the ORIGINAL Ghaf hole/mapped-block layout.
+    #
+    # Checksums are deliberately disabled here because the ESP has been
+    # modified by signing. This is only an internal reconstruction; the new
+    # bmap generated below gets fresh checksums.
+    #
+    bmaptool copy \
+        --no-verify \
+        --bmap "$original_bmap" \
+        "$signed_zst" \
+        "$raw_tmp"
 
-  log "[*] Generating updated bmap..."
+    #
+    # Now force the complete signed ESP into the reconstructed RAW.
+    # This is necessary because signing may have turned blocks which were
+    # holes in the original ESP into real data.
+    #
+    read -r EFI_START EFI_SECTORS < <(
+        uefisign_find_efi_partition \
+            "$signed_zst" \
+            zst \
+            "$WORK/bmap-partition-prefix.img"
+    )
 
-  bmaptool create \
-    -o "$bmap_out" \
-    "$raw_tmp"
+    local efi_offset=$((EFI_START * 512))
+    local efi_size=$((EFI_SECTORS * 512))
 
-  [[ -s "$bmap_out" ]] ||
-    die "bmaptool did not produce a bmap"
+    uefisign_extract_raw_range_to_file \
+        "$signed_zst" \
+        zst \
+        "$efi_offset" \
+        "$efi_size" \
+        "$signed_esp"
 
-  log "[*] Generated bmap:"
-  log "[*]   $bmap_out"
+    dd \
+        if="$signed_esp" \
+        of="$raw_tmp" \
+        bs=512 \
+        seek="$EFI_START" \
+        conv=notrunc \
+        status=none
 
-  rm -f -- "$raw_tmp"
+    log "[*] Generating bmap with preserved Ghaf sparse layout..."
+
+    bmaptool create \
+        -o "$bmap_out" \
+        "$raw_tmp"
+
+    rm -f -- "$raw_tmp" "$signed_esp"
 }
 
 detect_boot_efi_name() {
@@ -342,8 +372,9 @@ if $HAVE_BMAP; then
   SIGNED_BMAP="$WORK/ghaf-image.bmap"
 
   regenerate_bmap \
-    "$SIGNED_OUT" \
-    "$SIGNED_BMAP"
+      "$SIGNED_OUT" \
+      "$BMAP_ISO_PATH" \
+      "$SIGNED_BMAP"
 fi
 
 #
