@@ -19,7 +19,7 @@ PKEY="$2"
 ISO_IN="$3"
 OUTDIR="$4"
 
-for b in xorriso mtype mdir mmd mcopy mkfs.vfat awk sed tr stat ukify systemd-sbsign uefisignraw; do
+for b in xorriso mtype mdir mmd mcopy mkfs.vfat awk sed tr stat ukify systemd-sbsign uefisignraw bmaptool zstd dd; do
   is_needed "$b"
 done
 
@@ -42,6 +42,70 @@ fat_path() {
   [[ "${p:0:1}" == "/" ]] || p="/$p"
   p="${p//\/\//\/}"
   printf '%s' "$p"
+}
+
+regenerate_bmap() {
+    local signed_zst="$1"
+    local original_bmap="$2"
+    local bmap_out="$3"
+
+    local raw_tmp="$WORK/bmap-source.raw"
+    local signed_esp="$WORK/signed-runtime-esp.img"
+
+    rm -f -- "$raw_tmp" "$signed_esp" "$bmap_out"
+
+    log "[*] Reconstructing original sparse layout..."
+
+    #
+    # Preserve the ORIGINAL Ghaf hole/mapped-block layout.
+    #
+    # Checksums are deliberately disabled here because the ESP has been
+    # modified by signing. This is only an internal reconstruction; the new
+    # bmap generated below gets fresh checksums.
+    #
+    bmaptool copy \
+        --no-verify \
+        --bmap "$original_bmap" \
+        "$signed_zst" \
+        "$raw_tmp"
+
+    #
+    # Now force the complete signed ESP into the reconstructed RAW.
+    # This is necessary because signing may have turned blocks which were
+    # holes in the original ESP into real data.
+    #
+    read -r EFI_START EFI_SECTORS < <(
+        uefisign_find_efi_partition \
+            "$signed_zst" \
+            zst \
+            "$WORK/bmap-partition-prefix.img"
+    )
+
+    local efi_offset=$((EFI_START * 512))
+    local efi_size=$((EFI_SECTORS * 512))
+
+    uefisign_extract_raw_range_to_file \
+        "$signed_zst" \
+        zst \
+        "$efi_offset" \
+        "$efi_size" \
+        "$signed_esp"
+
+    dd \
+        if="$signed_esp" \
+        of="$raw_tmp" \
+        bs=512 \
+        seek="$EFI_START" \
+        conv=notrunc \
+        status=none
+
+    log "[*] Generating bmap with preserved Ghaf sparse layout..."
+
+    bmaptool create \
+        -o "$bmap_out" \
+        "$raw_tmp"
+
+    rm -f -- "$raw_tmp" "$signed_esp"
 }
 
 detect_boot_efi_name() {
@@ -247,31 +311,103 @@ cp "$WORK/esp.img" "$WORK/iso_root/boot/efi.img"
 # ===== PHASE 2: Signed runtime RAW in ISO filesystem =====
 # New layout: raw runtime image is on the ISO FS, not in nix-store.squashfs
 
+# ===== PHASE 2: Signed runtime RAW in ISO filesystem =====
+
 RAW_ISO_REL="/ghaf-image/ghaf-image.raw.zst"
+BMAP_ISO_REL="/ghaf-image/ghaf-image.bmap"
+
 RAW_ISO_PATH="$WORK/iso_root$RAW_ISO_REL"
+BMAP_ISO_PATH="$WORK/iso_root$BMAP_ISO_REL"
 
-[[ -f "$RAW_ISO_PATH" ]] || die "Runtime raw image not found at $RAW_ISO_REL in ISO"
+[[ -f "$RAW_ISO_PATH" ]] ||
+  die "Runtime raw image not found at $RAW_ISO_REL in ISO"
 
-log "[*] Runtime raw image (ISO FS): $RAW_ISO_PATH"
+log "[*] Runtime raw image:"
+log "[*]   $RAW_ISO_PATH"
 
-EXPOSED_IN="$WORK/$(basename "$RAW_ISO_PATH")"
-cp -f "$RAW_ISO_PATH" "$EXPOSED_IN"
-log "[*] Exposed unsigned runtime image: $EXPOSED_IN"
+if [[ -f "$BMAP_ISO_PATH" ]]; then
+  log "[*] Runtime bmap detected:"
+  log "[*]   $BMAP_ISO_PATH"
+  HAVE_BMAP=true
+else
+  #
+  # Keep compatibility with older Ghaf installers which did not include
+  # a pre-generated bmap.
+  #
+  log "[*] No runtime bmap present; assuming older installer layout"
+  HAVE_BMAP=false
+fi
 
 OUTDIR_RAW="$WORK/raw_out"
 mkdir -p "$OUTDIR_RAW"
-log "[*] Signing runtime raw.zst via ci-yubi#uefisignraw…"
-uefisignraw "$CERT" "$PKEY" "$EXPOSED_IN" "$OUTDIR_RAW"
+
+log "[*] Signing runtime raw.zst via ci-yubi#uefisignraw..."
+
+#
+# There is no need to make another copy of ghaf-image.raw.zst first.
+# uefisignraw does not modify its input.
+#
+uefisignraw \
+  "$CERT" \
+  "$PKEY" \
+  "$RAW_ISO_PATH" \
+  "$OUTDIR_RAW"
 
 # shellcheck disable=SC2012
-SIGNED_OUT="$(ls -1 "$OUTDIR_RAW"/*.raw.zst 2>/dev/null | head -n1 || true)"
-[[ -n "$SIGNED_OUT" && -f "$SIGNED_OUT" ]] || die "uefisignraw did not produce a *.raw.zst in $OUTDIR_RAW"
+SIGNED_OUT="$(
+  ls -1 "$OUTDIR_RAW"/*.raw.zst 2>/dev/null |
+    head -n1 ||
+    true
+)"
 
-log "[*] Replacing raw.zst in ISO filesystem at $RAW_ISO_REL"
+[[ -n "$SIGNED_OUT" && -f "$SIGNED_OUT" ]] ||
+  die "uefisignraw did not produce a *.raw.zst in $OUTDIR_RAW"
+
+#
+# If the installer contains a bmap, regenerate it against the SIGNED image
+# before rebuilding the ISO. Signing modifies the ESP, so the original bmap
+# is no longer valid.
+#
+if $HAVE_BMAP; then
+  SIGNED_BMAP="$WORK/ghaf-image.bmap"
+
+  regenerate_bmap \
+      "$SIGNED_OUT" \
+      "$BMAP_ISO_PATH" \
+      "$SIGNED_BMAP"
+fi
+
+#
+# Replace runtime image.
+#
+log "[*] Replacing runtime raw image at $RAW_ISO_REL"
+
 chmod u+w "$(dirname "$RAW_ISO_PATH")" || true
 chmod u+w "$RAW_ISO_PATH" 2>/dev/null || true
-rm -f "$RAW_ISO_PATH" || true
-install -m 0644 -D "$SIGNED_OUT" "$RAW_ISO_PATH"
+
+rm -f -- "$RAW_ISO_PATH"
+
+#
+# raw_out and iso_root are underneath the same $WORK directory, so mv avoids
+# keeping another multi-GB copy of the signed compressed image.
+#
+mv -f -- "$SIGNED_OUT" "$RAW_ISO_PATH"
+chmod 0644 "$RAW_ISO_PATH"
+
+#
+# Replace its bmap as part of the same artifact pair.
+#
+if $HAVE_BMAP; then
+  log "[*] Replacing runtime bmap at $BMAP_ISO_REL"
+
+  chmod u+w "$BMAP_ISO_PATH" 2>/dev/null || true
+  rm -f -- "$BMAP_ISO_PATH"
+
+  install \
+    -m 0644 \
+    "$SIGNED_BMAP" \
+    "$BMAP_ISO_PATH"
+fi
 
 # ---------- Rebuild final ISO once ----------
 FINAL_ISO="signed_$(basename "${ISO_IN%.iso}").iso"

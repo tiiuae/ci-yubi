@@ -63,6 +63,289 @@ fat_path() {
   printf '%s' "$p"
 }
 
+efi_arch_from_systemd_boot() {
+  case "${1,,}" in
+    systemd-bootaa64.efi)
+      printf '%s\n' "aa64"
+      ;;
+    systemd-bootx64.efi)
+      printf '%s\n' "x64"
+      ;;
+    systemd-bootia32.efi)
+      printf '%s\n' "ia32"
+      ;;
+    systemd-bootarm.efi)
+      printf '%s\n' "arm"
+      ;;
+    *)
+      log "[!] Cannot determine EFI architecture from: $1"
+      return 1
+      ;;
+  esac
+}
+
+check_stub_arch() {
+  local stub="$1"
+  local arch="$2"
+  local desc
+
+  desc="$(file -b "$stub")"
+
+  log "[DEBUG] EFI stub: $stub"
+  log "[DEBUG] EFI stub type: $desc"
+
+  case "$arch" in
+    aa64)
+      [[ "$desc" == *ARM64* || "$desc" == *Aarch64* ]]
+      ;;
+    x64)
+      [[ "$desc" == *x86-64* ]]
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+extract_sparse_raw_range() {
+  local input="$1"
+  local input_type="$2"
+  local skip_bytes="$3"
+  local count_bytes="$4"
+  local output="$5"
+
+  local statuses input_rc dd_rc
+
+  rm -f -- "$output"
+
+  set +e
+  set +o pipefail
+
+  uefisign_raw_input "$input" "$input_type" |
+    dd \
+      of="$output" \
+      bs="$UEFISIGN_STREAM_BS" \
+      iflag=fullblock,skip_bytes,count_bytes \
+      skip="$skip_bytes" \
+      count="$count_bytes" \
+      conv=sparse \
+      status=none
+
+  statuses=("${PIPESTATUS[@]}")
+
+  set -o pipefail
+  set -e
+
+  input_rc="${statuses[0]}"
+  dd_rc="${statuses[1]}"
+
+  if (( dd_rc != 0 )); then
+    log "[!] Failed to extract root filesystem"
+    return 1
+  fi
+
+  # dd stops after count_bytes, therefore zstd commonly gets SIGPIPE.
+  if (( input_rc != 0 && input_rc != 141 )); then
+    log "[!] Failed while reading compressed RAW image"
+    return 1
+  fi
+
+  local actual_size
+  actual_size="$(stat -c%s "$output")"
+
+  if (( actual_size != count_bytes )); then
+    log "[!] Root partition extraction size mismatch:"
+    log "[!] expected $count_bytes, got $actual_size"
+    return 1
+  fi
+}
+
+find_linux_root_partition() {
+  local prefix="$1"
+
+  #
+  # fdisk can read the partition table from the prefix that
+  # uefisign_find_efi_partition() already extracted.
+  #
+  # Prefer a normal Linux filesystem partition. On the Orin SD image this is
+  # MBR type 83, partition 2.
+  #
+  fdisk -l \
+    -o Start,Sectors,Id,Type \
+    "$prefix" 2>/dev/null |
+    awk '
+      NR == 1 { next }
+
+      $3 == "83" {
+        print $1, $2
+        exit
+      }
+
+      /Linux filesystem/ {
+        print $1, $2
+        exit
+      }
+    '
+}
+
+extract_target_stub_from_image() {
+  local arch="$1"
+  local output="$2"
+
+  local root_start
+  local root_sectors
+  local root_offset
+  local root_size
+  local root_image
+  local stub_name
+  local candidate
+  local source_path
+  local debugfs_err
+
+  stub_name="linux${arch}.efi.stub"
+  root_image="$TMPWDIR/root-partition.img"
+  debugfs_err="$TMPWDIR/debugfs-stub.err"
+
+  read -r root_start root_sectors < <(
+    find_linux_root_partition "$TMPWDIR/partition-prefix.img"
+  )
+
+  if [[ -z "${root_start:-}" || -z "${root_sectors:-}" ]]; then
+    log "[DEBUG] Could not locate Linux root partition"
+    return 1
+  fi
+
+  root_offset=$((root_start * 512))
+  root_size=$((root_sectors * 512))
+
+  log "[*] Root partition:"
+  log "[*]   start:   $root_start"
+  log "[*]   sectors: $root_sectors"
+  log "[*]   offset:  $root_offset"
+  log "[*]   size:    $root_size"
+  log "[*] Temporarily extracting root partition (sparse)..."
+
+  extract_sparse_raw_range \
+    "$DISK_IMAGE_ZST" \
+    "$input_type" \
+    "$root_offset" \
+    "$root_size" \
+    "$root_image"
+
+  mapfile -t SYSTEMD_CANDIDATES < <(
+    debugfs -R 'ls -l /nix/store' "$root_image" 2>/dev/null |
+      awk '{print $NF}' |
+      grep -E '^[a-z0-9]{32}-systemd-[0-9]' ||
+      true
+  )
+
+  if [[ "${#SYSTEMD_CANDIDATES[@]}" -eq 0 ]]; then
+    log "[DEBUG] No systemd package found in target /nix/store"
+    rm -f -- "$root_image"
+    return 1
+  fi
+
+  for candidate in "${SYSTEMD_CANDIDATES[@]}"; do
+    source_path="/nix/store/${candidate}/lib/systemd/boot/efi/${stub_name}"
+
+    rm -f -- "$output" "$debugfs_err"
+
+    log "[DEBUG] Trying EFI stub:"
+    log "[DEBUG]   $source_path"
+
+    debugfs \
+      -R "dump $source_path $output" \
+      "$root_image" \
+      >/dev/null 2>"$debugfs_err" || true
+
+    if [[ ! -s "$output" ]]; then
+      log "[DEBUG] Stub not present in this systemd output"
+
+      if [[ -s "$debugfs_err" ]]; then
+        while IFS= read -r line; do
+          log "[DEBUG] debugfs: $line"
+        done <"$debugfs_err"
+      fi
+
+      continue
+    fi
+
+    log "[*] Found EFI stub in target image:"
+    log "[*]   $source_path"
+
+    if ! check_stub_arch "$output" "$arch"; then
+      log "[!] Target-image EFI stub has wrong architecture"
+      rm -f -- "$output"
+      continue
+    fi
+
+    rm -f -- "$root_image" "$debugfs_err"
+    return 0
+  done
+
+  rm -f -- "$root_image" "$debugfs_err" "$output"
+
+  return 1
+}
+
+find_efi_stub() {
+  local arch="$1"
+  local extracted_stub="$TMPWDIR/linux${arch}.efi.stub"
+  local bundled_stub=""
+
+  EFI_STUB=""
+
+  #
+  # 1. Prefer the EFI stub from the target image.
+  #
+  log "[*] Looking for target EFI stub in image..."
+
+  if extract_target_stub_from_image "$arch" "$extracted_stub"; then
+    EFI_STUB="$extracted_stub"
+
+    log "[*] Using EFI stub from target image:"
+    log "[*]   $EFI_STUB"
+
+    return 0
+  fi
+
+  log "[*] EFI stub not found in target image."
+
+  #
+  # 2. Fall back to the stub bundled with ci-yubi.
+  #
+  if [[ -n "${UEFISIGN_STUB_DIR:-}" ]]; then
+    bundled_stub="${UEFISIGN_STUB_DIR}/linux${arch}.efi.stub"
+
+    log "[*] Trying bundled EFI stub:"
+    log "[*]   $bundled_stub"
+
+    if [[ -f "$bundled_stub" ]]; then
+      if ! check_stub_arch "$bundled_stub" "$arch"; then
+        log "[!] Bundled EFI stub has wrong architecture"
+        return 1
+      fi
+
+      EFI_STUB="$bundled_stub"
+
+      log "[*] Using bundled fallback EFI stub:"
+      log "[*]   $EFI_STUB"
+
+      return 0
+    fi
+  fi
+
+  log "[!] Could not find EFI stub for architecture '$arch'"
+  log "[!] Tried:"
+  log "[!]   target RAW image"
+
+  if [[ -n "${UEFISIGN_STUB_DIR:-}" ]]; then
+    log "[!]   ${UEFISIGN_STUB_DIR}/linux${arch}.efi.stub"
+  fi
+
+  return 1
+}
+
 log "[*] Locating EFI partition offset and size..."
 read -r EFI_START SECTORS < <(uefisign_find_efi_partition "$DISK_IMAGE_ZST" "$input_type" "$TMPWDIR/partition-prefix.img")
 EFI_OFFSET=$((EFI_START * 512))
@@ -167,11 +450,61 @@ else
   fi
 
   log "[*] Building UKI with original cmdline from loader entry..."
-  ukify build \
-    --linux "$TMPWDIR/bzImage.efi" \
-    "${INITRD_ARGS[@]}" \
-    --cmdline "@$TMPWDIR/cmdline" \
-    --output "$TMPWDIR/$UKI_BASENAME"
+case "${SYSTEMD_BOOT_NAME,,}" in
+  systemd-bootaa64.efi)
+    EFI_ARCH=aa64
+    ;;
+  systemd-bootx64.efi)
+    EFI_ARCH=x64
+    ;;
+  systemd-bootia32.efi)
+    EFI_ARCH=ia32
+    ;;
+  systemd-bootarm.efi)
+    EFI_ARCH=arm
+    ;;
+  *)
+    log "[!] Unsupported EFI architecture: $SYSTEMD_BOOT_NAME"
+    exit 1
+    ;;
+esac
+
+log "[*] Target EFI architecture: $EFI_ARCH"
+
+EFI_STUB=""
+
+EFI_ARCH="$(efi_arch_from_systemd_boot "$SYSTEMD_BOOT_NAME")"
+log "[*] Target EFI architecture: $EFI_ARCH"
+
+find_efi_stub "$EFI_ARCH"
+
+log "[*] Using EFI stub: $EFI_STUB"
+
+ukify build \
+  --efi-arch "$EFI_ARCH" \
+  --stub "$EFI_STUB" \
+  --linux "$TMPWDIR/bzImage.efi" \
+  "${INITRD_ARGS[@]}" \
+  --cmdline "@$TMPWDIR/cmdline" \
+  --output "$TMPWDIR/$UKI_BASENAME"
+
+log "[*] Checking generated UKI..."
+file "$TMPWDIR/$UKI_BASENAME"
+
+case "$EFI_ARCH" in
+  aa64)
+    file "$TMPWDIR/$UKI_BASENAME" | grep -Eq 'ARM64|Aarch64' || {
+      log "[!] Generated UKI is not ARM64!"
+      exit 1
+    }
+    ;;
+  x64)
+    file "$TMPWDIR/$UKI_BASENAME" | grep -q 'x86-64' || {
+      log "[!] Generated UKI is not x86-64!"
+      exit 1
+    }
+    ;;
+esac
 
   awk -v new="${UKI_DST_REL}" '
     BEGIN{done=0}
