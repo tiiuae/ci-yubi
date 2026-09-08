@@ -24,6 +24,20 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
+        x86_64Pkgs = nixpkgs.legacyPackages.x86_64-linux;
+        aarch64Pkgs = nixpkgs.legacyPackages.aarch64-linux;
+        systemdEfiStubs = pkgs.runCommand "systemd-efi-stubs" { } ''
+          mkdir -p "$out/lib/systemd/boot/efi"
+
+          cp \
+              ${x86_64Pkgs.systemd}/lib/systemd/boot/efi/linuxx64.efi.stub \
+              "$out/lib/systemd/boot/efi/linuxx64.efi.stub"
+
+          cp \
+              ${aarch64Pkgs.systemd}/lib/systemd/boot/efi/linuxaa64.efi.stub \
+              "$out/lib/systemd/boot/efi/linuxaa64.efi.stub"
+        '';
+
         tii-sbsign = sbsigntools.packages.${system}.default;
         akvenginePkg = akvengine.packages.${system}.default;
 
@@ -114,10 +128,19 @@
               zstd
               systemdUkify
               openssl
+              e2fsprogs
+              file
+              gnugrep
+              gnused
+              findutils
             ])
             ++ [
               systemd-sbsign
             ];
+          runtimeEnv = {
+            UEFISIGN_STUB_DIR =
+              "${systemdEfiStubs}/lib/systemd/boot/efi";
+          };
           text = uefiRawImageLib + "\n" + builtins.readFile ./secboot/uefi-sign-raw.sh;
         };
 
@@ -137,12 +160,16 @@
               binutils
               findutils
               dosfstools
+              bmaptool
             ])
             ++ [
               systemd-sbsign
               uefisignraw
             ];
-          text = builtins.readFile ./secboot/uefi-sign-iso.sh;
+          text =
+            uefiRawImageLib
+            + "\n"
+            + builtins.readFile ./secboot/uefi-sign-iso.sh;
         };
 
         uefikeygen = pkgs.writeShellApplication {
