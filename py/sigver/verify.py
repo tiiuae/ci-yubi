@@ -22,6 +22,8 @@ LOG = logging.getLogger(os.path.abspath(__file__))
 CERTIFICATE_NAME="INT-Ghaf-Devenv-Common"
 
 # Azure Function (verify-signature) URL
+# Please change it based to correspond to your deployment
+#URL = "http://localhost:7071/api/VerifySignature"
 URL = "https://ghaf-devenv-signverify.azurewebsites.net/api/verifysignature"
 
 def main():
@@ -31,6 +33,7 @@ def main():
     sigfile = "signature.bin"
 
     parser = argparse.ArgumentParser(description="Parse arguments")
+    parser.add_argument("--keyvault", default="ghaf-devenv-kv", help="Specify the keyvault name. Default is ghaf-devenv-kv.")
     parser.add_argument("--path", default=".",
                         help="Specify the path. Default is current directory.")
     parser.add_argument("--cert", default=CERTIFICATE_NAME, help="Specify the certificate name.")
@@ -41,6 +44,7 @@ def main():
     path=args.path
     certificate_name = args.cert
     sigfile = args.sigfile
+    keyvault = args.keyvault
 
     digest = base64.b64encode(sha256sum(path, 1024 * 1024, True)).decode('utf-8')
     if os.path.getsize(sigfile) != 64:
@@ -53,6 +57,7 @@ def main():
     signature = base64.b64encode(sig).decode('utf-8')
 
     data = {
+        "keyvault": keyvault,
         "certificateName": certificate_name,
         "Hash": digest,
         "Signature": signature
