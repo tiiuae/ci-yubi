@@ -9,12 +9,23 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   cat <<EOF
-Usage: $0 [--create-root] [--env NAME]
+Usage: $0 [--create-root] [--create-intermediate] [--create-slsa]
+          [--create-cosign] [--create-ota] [--create-uefi] [--env NAME]
 
 Options:
   --create-root  Create the Root CA keypair and certificate.
                  Without this option, the existing Root CA certificate/key
                  label is reused to sign the rest of the hierarchy.
+  --create-intermediate
+                 Create the Intermediate CA keypair and certificate.
+                 Without this option, the existing Intermediate CA
+                 certificate/key label is reused.
+  --create-slsa  Create the SLSA binary and provenance certificates.
+  --create-cosign Create the cosign certificate.
+  --create-ota   Create the OTA certificate.
+  --create-uefi  Create the UEFI PK, KEK, and db certificates.
+                 If no component option is given, all non-root components
+                 are created (the historical behavior).
   --env NAME     Suffix generated non-root labels and output basenames with
                  -NAME, and append NAME to generated certificate subjects.
   -h, --help     Show this help.
@@ -22,12 +33,43 @@ EOF
 }
 
 CREATE_ROOT=0
+CREATE_INTERMEDIATE=0
+CREATE_SLSA=0
+CREATE_COSIGN=0
+CREATE_OTA=0
+CREATE_UEFI=0
+CREATE_COMPONENT_SELECTED=0
 ENV_NAME=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --create-root)
       CREATE_ROOT=1
+      shift
+      ;;
+    --create-intermediate)
+      CREATE_INTERMEDIATE=1
+      CREATE_COMPONENT_SELECTED=1
+      shift
+      ;;
+    --create-slsa)
+      CREATE_SLSA=1
+      CREATE_COMPONENT_SELECTED=1
+      shift
+      ;;
+    --create-cosign)
+      CREATE_COSIGN=1
+      CREATE_COMPONENT_SELECTED=1
+      shift
+      ;;
+    --create-ota)
+      CREATE_OTA=1
+      CREATE_COMPONENT_SELECTED=1
+      shift
+      ;;
+    --create-uefi)
+      CREATE_UEFI=1
+      CREATE_COMPONENT_SELECTED=1
       shift
       ;;
     --env)
@@ -54,6 +96,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "$CREATE_COMPONENT_SELECTED" -eq 0 ]]; then
+  CREATE_SLSA=1
+  CREATE_COSIGN=1
+  CREATE_OTA=1
+  CREATE_UEFI=1
+fi
+
 # --- Config (adjust as needed) ---
 : "${P11MODULE:?Set P11MODULE to the netHSM PKCS#11 module path, e.g. /nix/store/.../libnethsm_pkcs11.so}"
 TOKEN_LABEL="${TOKEN_LABEL:-NetHSM}"
@@ -73,6 +122,7 @@ INT_SUBJ="${INT_SUBJ:-/C=FI/O=Ghaf/CN=Ghaf Intermediate CA}"
 LEAF_BIN_SUBJ="${LEAF_BIN_SUBJ:-/C=FI/ST=Tampere/L=Tampere/O=Ghaf/CN=Ghaf Infra Sign Binary}"
 LEAF_PROV_SUBJ="${LEAF_PROV_SUBJ:-/C=FI/ST=Tampere/L=Tampere/O=Ghaf/CN=Ghaf Infra Sign Provenance}"
 LEAF_COSIGN_SUBJ="${LEAF_COSIGN_SUBJ:-/C=FI/ST=Tampere/L=Tampere/O=Ghaf/CN=Ghaf Infra Sign Cosign}"
+LEAF_OTA_SUBJ="${LEAF_OTA_SUBJ:-/C=FI/ST=Tampere/L=Tampere/O=Ghaf/CN=Ghaf Infra Sign OTA}"
 UEFI_PK_SUBJ="${UEFI_PK_SUBJ:-/C=FI/L=Tampere/O=TII/OU=Ghaf-Test/CN=PK Root CA}"
 UEFI_KEK_SUBJ="${UEFI_KEK_SUBJ:-/C=FI/L=Tampere/O=TII/OU=Ghaf-Test/CN=KEK Intermediate CA}"
 UEFI_DB_SUBJ="${UEFI_DB_SUBJ:-/C=FI/L=Tampere/O=TII/OU=Ghaf-Test/CN=DB Service Cert}"
@@ -100,6 +150,7 @@ if [[ -n "$ENV_NAME" ]]; then
   LEAF_BIN_LABEL="${LEAF_BIN_LABEL}${ENV_SUFFIX}"
   LEAF_PROV_LABEL="${LEAF_PROV_LABEL}${ENV_SUFFIX}"
   LEAF_COSIGN_LABEL="${LEAF_COSIGN_LABEL}${ENV_SUFFIX}"
+  LEAF_OTA_LABEL="${LEAF_OTA_LABEL}${ENV_SUFFIX}"
   UEFI_PK_LABEL="${UEFI_PK_LABEL}${ENV_SUFFIX}"
   UEFI_KEK_LABEL="${UEFI_KEK_LABEL}${ENV_SUFFIX}"
   UEFI_DB_LABEL="${UEFI_DB_LABEL}${ENV_SUFFIX}"
@@ -108,7 +159,7 @@ if [[ -n "$ENV_NAME" ]]; then
   LEAF_BIN_SUBJ="${LEAF_BIN_SUBJ} ${ENV_NAME}"
   LEAF_PROV_SUBJ="${LEAF_PROV_SUBJ} ${ENV_NAME}"
   LEAF_COSIGN_SUBJ="${LEAF_COSIGN_SUBJ} ${ENV_NAME}"
-  LEAF_OTA_SUBJ="${LEAF_OTA_SUBJ}.${ENV_NAME}"
+  LEAF_OTA_SUBJ="${LEAF_OTA_SUBJ} ${ENV_NAME}"
   UEFI_PK_SUBJ="${UEFI_PK_SUBJ} ${ENV_NAME}"
   UEFI_KEK_SUBJ="${UEFI_KEK_SUBJ} ${ENV_NAME}"
   UEFI_DB_SUBJ="${UEFI_DB_SUBJ} ${ENV_NAME}"
@@ -154,7 +205,9 @@ UEFI_OUT_DIR="${UEFI_OUT_DIR:-$OUTDIR/uefi/keys}"
 UEFI_PK_DIR="$UEFI_OUT_DIR/PK"
 UEFI_KEK_DIR="$UEFI_OUT_DIR/KEK"
 UEFI_DB_DIR="$UEFI_OUT_DIR/db"
-mkdir -p "$UEFI_PK_DIR" "$UEFI_KEK_DIR" "$UEFI_DB_DIR"
+if [[ "$CREATE_UEFI" -eq 1 ]]; then
+  mkdir -p "$UEFI_PK_DIR" "$UEFI_KEK_DIR" "$UEFI_DB_DIR"
+fi
 
 UEFI_PK_CSR="$UEFI_PK_DIR/${UEFI_PK_BASE}.csr"
 UEFI_PK_CERT="$UEFI_PK_DIR/${UEFI_PK_BASE}.pem"
@@ -209,7 +262,9 @@ if [[ "$CREATE_ROOT" -eq 1 ]]; then
   echo "[+] Done."
   echo "    Root CA cert:         $ROOT_CERT"
   echo "    Root CSR:             $ROOT_CSR"
-  exit 0
+  if [[ "$CREATE_COMPONENT_SELECTED" -eq 0 ]]; then
+    exit 0
+  fi
 else
   [[ -f "$ROOT_CERT" ]] || {
     echo "Error: Root CA certificate not found: $ROOT_CERT" >&2
@@ -220,239 +275,268 @@ else
   echo "[*] Reusing Root CA key in netHSM (label: $ROOT_LABEL)"
 fi
 
-# --- 4) Intermediate CA keypair in netHSM ---
-echo "[*] Creating Intermediate CA keypair in netHSM (label: $INT_LABEL)"
-pkcs11-tool --module "$P11MODULE" \
-  --keypairgen --key-type EC:prime256v1 \
-  --label "$INT_LABEL"
+if [[ "$CREATE_INTERMEDIATE" -eq 1 ]]; then
+  # --- 4) Intermediate CA keypair in netHSM ---
+  echo "[*] Creating Intermediate CA keypair in netHSM (label: $INT_LABEL)"
+  pkcs11-tool --module "$P11MODULE" \
+    --keypairgen --key-type EC:prime256v1 \
+    --label "$INT_LABEL"
 
-# --- 5) Intermediate CA CSR (key stays in netHSM) ---
-echo "[*] Creating Intermediate CA CSR -> $INT_CSR"
-openssl req -new \
-  -provider pkcs11 -provider default \
-  -key "$INT_KEY_URI" \
-  -subj "$INT_SUBJ" \
-  -out "$INT_CSR"
+  # --- 5) Intermediate CA CSR (key stays in netHSM) ---
+  echo "[*] Creating Intermediate CA CSR -> $INT_CSR"
+  openssl req -new \
+    -provider pkcs11 -provider default \
+    -key "$INT_KEY_URI" \
+    -subj "$INT_SUBJ" \
+    -out "$INT_CSR"
 
-# --- 6) Intermediate CA certificate signed by Root CA (root key in netHSM) ---
-echo "[*] Signing Intermediate CA certificate with Root CA -> $INT_CERT"
-openssl x509 -req \
-  -in "$INT_CSR" \
-  -provider pkcs11 -provider default \
-  -CA "$ROOT_CERT" \
-  -CAkey "$ROOT_KEY_URI" \
-  -CAcreateserial \
-  -days "$INT_DAYS" -sha256 \
-  -extfile "$INT_EXT" \
-  -out "$INT_CERT"
+  # --- 6) Intermediate CA certificate signed by Root CA (root key in netHSM) ---
+  echo "[*] Signing Intermediate CA certificate with Root CA -> $INT_CERT"
+  openssl x509 -req \
+    -in "$INT_CSR" \
+    -provider pkcs11 -provider default \
+    -CA "$ROOT_CERT" \
+    -CAkey "$ROOT_KEY_URI" \
+    -CAcreateserial \
+    -days "$INT_DAYS" -sha256 \
+    -extfile "$INT_EXT" \
+    -out "$INT_CERT"
+else
+  [[ -f "$INT_CERT" ]] || {
+    echo "Error: Intermediate CA certificate not found: $INT_CERT" >&2
+    echo "Run $0 --create-intermediate first, or set OUTDIR/INT_LABEL to an existing intermediate." >&2
+    exit 1
+  }
+  echo "[*] Reusing Intermediate CA certificate: $INT_CERT"
+  echo "[*] Reusing Intermediate CA key in netHSM (label: $INT_LABEL)"
+fi
 
-# --- 7) Leaf BIN & PROV keypairs
-echo "[*] Creating Binary Leaf keypair in netHSM (label: $LEAF_BIN_LABEL)"
-pkcs11-tool --module "$P11MODULE" \
-  --keypairgen --key-type EC:prime256v1 \
-  --label "$LEAF_BIN_LABEL"
+if [[ "$CREATE_SLSA" -eq 1 ]]; then
+  # --- 7) Leaf BIN & PROV keypairs
+  echo "[*] Creating Binary Leaf keypair in netHSM (label: $LEAF_BIN_LABEL)"
+  pkcs11-tool --module "$P11MODULE" \
+    --keypairgen --key-type EC:prime256v1 \
+    --label "$LEAF_BIN_LABEL"
 
-echo "[*] Creating Provenance Leaf keypair in netHSM (label: $LEAF_PROV_LABEL)"
-pkcs11-tool --module "$P11MODULE" \
-  --keypairgen --key-type EC:ED25519 \
-  --label "$LEAF_PROV_LABEL"
+  echo "[*] Creating Provenance Leaf keypair in netHSM (label: $LEAF_PROV_LABEL)"
+  pkcs11-tool --module "$P11MODULE" \
+    --keypairgen --key-type EC:ED25519 \
+    --label "$LEAF_PROV_LABEL"
 
+  # --- 8) Leaf BIN & PROV CSR
+  echo "[*] Creating Binary Leaf CSR -> $LEAF_BIN_CSR"
+  openssl req -new \
+    -provider pkcs11 -provider default \
+    -key "pkcs11:token=${TOKEN_LABEL};object=$LEAF_BIN_LABEL" \
+    -out "$LEAF_BIN_CSR" \
+    -subj "$LEAF_BIN_SUBJ"
 
-# --- 8) Leaf BIN & PROV CSR
-echo "[*] Creating Binary Leaf CSR -> $LEAF_BIN_CSR"
-openssl req -new \
-	-provider pkcs11 -provider default \
-	-key "pkcs11:token=${TOKEN_LABEL};object=$LEAF_BIN_LABEL" \
-	-out "$LEAF_BIN_CSR" \
-	-subj "$LEAF_BIN_SUBJ"
+  echo "[*] Creating Provenance Leaf CSR -> $LEAF_PROV_CSR"
+  openssl req -new \
+    -provider pkcs11 -provider default \
+    -key "pkcs11:token=${TOKEN_LABEL};object=$LEAF_PROV_LABEL" \
+    -out "$LEAF_PROV_CSR" \
+    -subj "$LEAF_PROV_SUBJ"
 
-echo "[*] Creating Provenance Leaf CSR -> $LEAF_PROV_CSR"
-openssl req -new \
-	-provider pkcs11 -provider default \
-	-key "pkcs11:token=${TOKEN_LABEL};object=$LEAF_PROV_LABEL" \
-	-out "$LEAF_PROV_CSR" \
-	-subj "$LEAF_PROV_SUBJ"
+  # --- 9) Leaf BIN & PROV certificate signed by Intermediate CA (key in netHSM) ---
+  echo "[*] Signing Binary Leaf certificate with Intermediate CA -> $LEAF_BIN_CERT"
+  openssl x509 -req \
+    -in "$LEAF_BIN_CSR" \
+    -provider pkcs11 -provider default \
+    -CA "$INT_CERT" \
+    -CAkey "$INT_KEY_URI" \
+    -CAcreateserial \
+    -days "$LEAF_DAYS" -sha256 \
+    -extfile "$LEAF_EXT" \
+    -out "$LEAF_BIN_CERT"
 
-# --- 9) Leaf BIN & PROV certificate signed by Intermediate CA (key in netHSM) ---
-echo "[*] Signing Binary Leaf certificate with Intermediate CA -> $LEAF_BIN_CERT"
-openssl x509 -req \
-  -in "$LEAF_BIN_CSR" \
-  -provider pkcs11 -provider default \
-  -CA "$INT_CERT" \
-  -CAkey "$INT_KEY_URI" \
-  -CAcreateserial \
-  -days "$LEAF_DAYS" -sha256 \
-  -extfile "$LEAF_EXT" \
-  -out "$LEAF_BIN_CERT"
+  echo "[*] Signing Provenance Leaf certificate with Intermediate CA -> $LEAF_PROV_CERT"
+  openssl x509 -req \
+    -in "$LEAF_PROV_CSR" \
+    -provider pkcs11 -provider default \
+    -CA "$INT_CERT" \
+    -CAkey "$INT_KEY_URI" \
+    -CAcreateserial \
+    -days "$LEAF_DAYS" -sha256 \
+    -extfile "$LEAF_EXT" \
+    -out "$LEAF_PROV_CERT"
+fi
 
-echo "[*] Signing Provenance Leaf certificate with Intermediate CA -> $LEAF_PROV_CERT"
-openssl x509 -req \
-  -in "$LEAF_PROV_CSR" \
-  -provider pkcs11 -provider default \
-  -CA "$INT_CERT" \
-  -CAkey "$INT_KEY_URI" \
-  -CAcreateserial \
-  -days "$LEAF_DAYS" -sha256 \
-  -extfile "$LEAF_EXT" \
-  -out "$LEAF_PROV_CERT"
+if [[ "$CREATE_COSIGN" -eq 1 ]]; then
+  # --- 10) Leaf certificate for cosign signed by Intermediate CA (key in netHSM) ---
+  echo "[*] Creating cosign Leaf keypair in netHSM (label: $LEAF_COSIGN_LABEL)"
+  pkcs11-tool --module "$P11MODULE" \
+    --keypairgen --key-type EC:ED25519 \
+    --label "$LEAF_COSIGN_LABEL"
 
-# --- 10) Leaf certificate for cosign signed by Intermediate CA (key in netHSM) ---
-echo "[*] Creating cosign Leaf keypair in netHSM (label: $LEAF_COSIGN_LABEL)"
-pkcs11-tool --module "$P11MODULE" \
-  --keypairgen --key-type EC:ED25519 \
-  --label "$LEAF_COSIGN_LABEL"
+  echo "[*] Creating cosign Leaf CSR -> $LEAF_COSIGN_CSR"
+  openssl req -new \
+    -provider pkcs11 -provider default \
+    -key "pkcs11:token=${TOKEN_LABEL};object=$LEAF_COSIGN_LABEL" \
+    -out "$LEAF_COSIGN_CSR" \
+    -subj "$LEAF_COSIGN_SUBJ"
 
-echo "[*] Creating cosign Leaf CSR -> $LEAF_COSIGN_CSR"
-openssl req -new \
-	-provider pkcs11 -provider default \
-        -key "pkcs11:token=${TOKEN_LABEL};object=$LEAF_COSIGN_LABEL" \
-        -out "$LEAF_COSIGN_CSR" \
-        -subj "$LEAF_COSIGN_SUBJ"
+  echo "[*] Signing cosign Leaf certificate with Intermediate CA -> $LEAF_COSIGN_CERT"
+  openssl x509 -req \
+    -in "$LEAF_COSIGN_CSR" \
+    -provider pkcs11 -provider default \
+    -CA "$INT_CERT" \
+    -CAkey "$INT_KEY_URI" \
+    -CAcreateserial \
+    -days "$LEAF_DAYS" -sha256 \
+    -extfile "$LEAF_EXT" \
+    -out "$LEAF_COSIGN_CERT"
+fi
 
-echo "[*] Signing cosign Leaf certificate with Intermediate CA -> $LEAF_COSIGN_CERT"
-openssl x509 -req \
-  -in "$LEAF_COSIGN_CSR" \
-  -provider pkcs11 -provider default \
-  -CA "$INT_CERT" \
-  -CAkey "$INT_KEY_URI" \
-  -CAcreateserial \
-  -days "$LEAF_DAYS" -sha256 \
-  -extfile "$LEAF_EXT" \
-  -out "$LEAF_COSIGN_CERT"
+if [[ "$CREATE_UEFI" -eq 1 ]]; then
+  # --- 11) UEFI Secure Boot keypairs and certificates in netHSM ---
+  echo "[*] Creating UEFI PK keypair in netHSM (label: $UEFI_PK_LABEL)"
+  pkcs11-tool --module "$P11MODULE" \
+    --keypairgen --key-type "$UEFI_KEY_TYPE" \
+    --label "$UEFI_PK_LABEL"
 
-# --- 11) UEFI Secure Boot keypairs and certificates in netHSM ---
-echo "[*] Creating UEFI PK keypair in netHSM (label: $UEFI_PK_LABEL)"
-pkcs11-tool --module "$P11MODULE" \
-  --keypairgen --key-type "$UEFI_KEY_TYPE" \
-  --label "$UEFI_PK_LABEL"
+  printf '%s\n' "$UEFI_PK_URI" > "$UEFI_PK_URI_FILE"
 
-printf '%s\n' "$UEFI_PK_URI" > "$UEFI_PK_URI_FILE"
+  echo "[*] Creating UEFI PK CSR -> $UEFI_PK_CSR"
+  openssl req -new \
+    -provider pkcs11 -provider default \
+    -key "$UEFI_PK_URI" \
+    -out "$UEFI_PK_CSR" \
+    -config "$UEFI_CONF/create_PK_cert.ini" \
+    -subj "$UEFI_PK_SUBJ"
 
-echo "[*] Creating UEFI PK CSR -> $UEFI_PK_CSR"
-openssl req -new \
-  -provider pkcs11 -provider default \
-  -key "$UEFI_PK_URI" \
-  -out "$UEFI_PK_CSR" \
-  -config "$UEFI_CONF/create_PK_cert.ini" \
-  -subj "$UEFI_PK_SUBJ"
+  echo "[*] Signing UEFI PK certificate with Root CA -> $UEFI_PK_CERT"
+  openssl x509 -req \
+    -in "$UEFI_PK_CSR" \
+    -provider pkcs11 -provider default \
+    -CA "$ROOT_CERT" \
+    -CAkey "$ROOT_KEY_URI" \
+    -CAcreateserial \
+    -out "$UEFI_PK_CERT" \
+    -days "$UEFI_DAYS" -sha256 \
+    -extfile "$ROOT_EXT"
 
-echo "[*] Signing UEFI PK certificate with Root CA -> $UEFI_PK_CERT"
-openssl x509 -req \
-  -in "$UEFI_PK_CSR" \
-  -provider pkcs11 -provider default \
-  -CA "$ROOT_CERT" \
-  -CAkey "$ROOT_KEY_URI" \
-  -CAcreateserial \
-  -out "$UEFI_PK_CERT" \
-  -days "$UEFI_DAYS" -sha256 \
-  -extfile "$ROOT_EXT"
+  echo "[*] Creating UEFI KEK keypair in netHSM (label: $UEFI_KEK_LABEL)"
+  pkcs11-tool --module "$P11MODULE" \
+    --keypairgen --key-type "$UEFI_KEY_TYPE" \
+    --label "$UEFI_KEK_LABEL"
 
-echo "[*] Creating UEFI KEK keypair in netHSM (label: $UEFI_KEK_LABEL)"
-pkcs11-tool --module "$P11MODULE" \
-  --keypairgen --key-type "$UEFI_KEY_TYPE" \
-  --label "$UEFI_KEK_LABEL"
+  printf '%s\n' "$UEFI_KEK_URI" > "$UEFI_KEK_URI_FILE"
 
-printf '%s\n' "$UEFI_KEK_URI" > "$UEFI_KEK_URI_FILE"
+  echo "[*] Creating UEFI KEK CSR -> $UEFI_KEK_CSR"
+  openssl req -new \
+    -provider pkcs11 -provider default \
+    -key "$UEFI_KEK_URI" \
+    -out "$UEFI_KEK_CSR" \
+    -config "$UEFI_CONF/create_KEK_cert.ini" \
+    -subj "$UEFI_KEK_SUBJ"
 
-echo "[*] Creating UEFI KEK CSR -> $UEFI_KEK_CSR"
-openssl req -new \
-  -provider pkcs11 -provider default \
-  -key "$UEFI_KEK_URI" \
-  -out "$UEFI_KEK_CSR" \
-  -config "$UEFI_CONF/create_KEK_cert.ini" \
-  -subj "$UEFI_KEK_SUBJ"
+  echo "[*] Signing UEFI KEK certificate with UEFI PK -> $UEFI_KEK_CERT"
+  openssl x509 -req \
+    -in "$UEFI_KEK_CSR" \
+    -provider pkcs11 -provider default \
+    -CA "$UEFI_PK_CERT" \
+    -CAkey "$UEFI_PK_URI" \
+    -CAcreateserial \
+    -out "$UEFI_KEK_CERT" \
+    -days "$UEFI_DAYS" \
+    -extfile "$UEFI_CONF/sign_KEK_csr.ini" \
+    -extensions v3_req
 
-echo "[*] Signing UEFI KEK certificate with UEFI PK -> $UEFI_KEK_CERT"
-openssl x509 -req \
-  -in "$UEFI_KEK_CSR" \
-  -provider pkcs11 -provider default \
-  -CA "$UEFI_PK_CERT" \
-  -CAkey "$UEFI_PK_URI" \
-  -CAcreateserial \
-  -out "$UEFI_KEK_CERT" \
-  -days "$UEFI_DAYS" \
-  -extfile "$UEFI_CONF/sign_KEK_csr.ini" \
-  -extensions v3_req
+  echo "[*] Creating UEFI db keypair in netHSM (label: $UEFI_DB_LABEL)"
+  pkcs11-tool --module "$P11MODULE" \
+    --keypairgen --key-type "$UEFI_KEY_TYPE" \
+    --label "$UEFI_DB_LABEL"
 
-echo "[*] Creating UEFI db keypair in netHSM (label: $UEFI_DB_LABEL)"
-pkcs11-tool --module "$P11MODULE" \
-  --keypairgen --key-type "$UEFI_KEY_TYPE" \
-  --label "$UEFI_DB_LABEL"
+  printf '%s\n' "$UEFI_DB_URI" > "$UEFI_DB_URI_FILE"
 
-printf '%s\n' "$UEFI_DB_URI" > "$UEFI_DB_URI_FILE"
+  echo "[*] Creating UEFI db CSR -> $UEFI_DB_CSR"
+  openssl req -new \
+    -provider pkcs11 -provider default \
+    -key "$UEFI_DB_URI" \
+    -out "$UEFI_DB_CSR" \
+    -config "$UEFI_CONF/create_DB_cert.ini" \
+    -subj "$UEFI_DB_SUBJ"
 
-echo "[*] Creating UEFI db CSR -> $UEFI_DB_CSR"
-openssl req -new \
-  -provider pkcs11 -provider default \
-  -key "$UEFI_DB_URI" \
-  -out "$UEFI_DB_CSR" \
-  -config "$UEFI_CONF/create_DB_cert.ini" \
-  -subj "$UEFI_DB_SUBJ"
+  echo "[*] Signing UEFI db certificate with UEFI KEK -> $UEFI_DB_CERT"
+  openssl x509 -req \
+    -in "$UEFI_DB_CSR" \
+    -provider pkcs11 -provider default \
+    -CA "$UEFI_KEK_CERT" \
+    -CAkey "$UEFI_KEK_URI" \
+    -CAcreateserial \
+    -out "$UEFI_DB_CERT" \
+    -days "$UEFI_DAYS" \
+    -extfile "$UEFI_CONF/sign_DB_csr.ini" \
+    -extensions v3_req
 
-echo "[*] Signing UEFI db certificate with UEFI KEK -> $UEFI_DB_CERT"
-openssl x509 -req \
-  -in "$UEFI_DB_CSR" \
-  -provider pkcs11 -provider default \
-  -CA "$UEFI_KEK_CERT" \
-  -CAkey "$UEFI_KEK_URI" \
-  -CAcreateserial \
-  -out "$UEFI_DB_CERT" \
-  -days "$UEFI_DAYS" \
-  -extfile "$UEFI_CONF/sign_DB_csr.ini" \
-  -extensions v3_req
+  echo "[*] Exporting UEFI certificates as DER"
+  openssl x509 -in "$UEFI_PK_CERT" -outform DER -out "$UEFI_PK_DER"
+  openssl x509 -in "$UEFI_KEK_CERT" -outform DER -out "$UEFI_KEK_DER"
+  openssl x509 -in "$UEFI_DB_CERT" -outform DER -out "$UEFI_DB_DER"
+fi
 
-echo "[*] Exporting UEFI certificates as DER"
-openssl x509 -in "$UEFI_PK_CERT" -outform DER -out "$UEFI_PK_DER"
-openssl x509 -in "$UEFI_KEK_CERT" -outform DER -out "$UEFI_KEK_DER"
-openssl x509 -in "$UEFI_DB_CERT" -outform DER -out "$UEFI_DB_DER"
+if [[ "$CREATE_OTA" -eq 1 ]]; then
+  # --- 12) Leaf certificate for OTA signed by Intermediate CA (key in netHSM) ---
+  echo "[*] Creating OTA Leaf keypair in netHSM (label: $LEAF_OTA_LABEL)"
+  pkcs11-tool --module "$P11MODULE" \
+    --keypairgen --key-type EC:ED25519 \
+    --label "$LEAF_OTA_LABEL"
 
-# --- 12) Leaf certificate for OTA signed by Intermediate CA (key in netHSM) ---
-echo "[*] Creating OTA Leaf keypair in netHSM (label: $LEAF_OTA_LABEL)"
-pkcs11-tool --module "$P11MODULE" \
-  --keypairgen --key-type EC:ED25519 \
-  --label "$LEAF_OTA_LABEL"
+  echo "[*] Creating OTA Leaf CSR -> $LEAF_OTA_CSR"
+  openssl req -new \
+    -provider pkcs11 -provider default \
+    -key "pkcs11:token=${TOKEN_LABEL};object=$LEAF_OTA_LABEL" \
+    -out "$LEAF_OTA_CSR" \
+    -subj "$LEAF_OTA_SUBJ"
 
-echo "[*] Creating OTA Leaf CSR -> $LEAF_OTA_CSR"
-openssl req -new \
-	-provider pkcs11 -provider default \
-        -key "pkcs11:token=${TOKEN_LABEL};object=$LEAF_OTA_LABEL" \
-        -out "$LEAF_OTA_CSR" \
-        -subj "$LEAF_OTA_SUBJ"
-
-echo "[*] Signing OTA Leaf certificate with Intermediate CA -> $LEAF_OTA_CERT"
-openssl x509 -req \
-  -in "$LEAF_OTA_CSR" \
-  -provider pkcs11 -provider default \
-  -CA "$INT_CERT" \
-  -CAkey "$INT_KEY_URI" \
-  -CAcreateserial \
-  -days "$LEAF_DAYS" -sha256 \
-  -extfile "$LEAF_EXT" \
-  -out "$LEAF_OTA_CERT"
-
-
+  echo "[*] Signing OTA Leaf certificate with Intermediate CA -> $LEAF_OTA_CERT"
+  openssl x509 -req \
+    -in "$LEAF_OTA_CSR" \
+    -provider pkcs11 -provider default \
+    -CA "$INT_CERT" \
+    -CAkey "$INT_KEY_URI" \
+    -CAcreateserial \
+    -days "$LEAF_DAYS" -sha256 \
+    -extfile "$LEAF_EXT" \
+    -out "$LEAF_OTA_CERT"
+fi
 
 echo
 echo "[+] Done."
 echo "    Root CA cert:         $ROOT_CERT"
 echo "    Intermediate CA cert: $INT_CERT"
-echo "    Binary Leaf cert:     $LEAF_BIN_CERT"
-echo "    Provenance Leaf cert: $LEAF_PROV_CERT"
-echo "    cosign Leaf cert:     $LEAF_COSIGN_CERT"
-echo "    OTA Leaf cert:        $LEAF_OTA_CERT"
+if [[ "$CREATE_SLSA" -eq 1 ]]; then
+  echo "    Binary Leaf cert:     $LEAF_BIN_CERT"
+  echo "    Provenance Leaf cert: $LEAF_PROV_CERT"
+fi
+if [[ "$CREATE_COSIGN" -eq 1 ]]; then
+  echo "    cosign Leaf cert:     $LEAF_COSIGN_CERT"
+fi
+if [[ "$CREATE_OTA" -eq 1 ]]; then
+  echo "    OTA Leaf cert:        $LEAF_OTA_CERT"
+fi
 if [[ "$CREATE_ROOT" -eq 1 ]]; then
   echo "    Root CSR:             $ROOT_CSR"
 fi
 echo "    Intermediate CSR:     $INT_CSR"
-echo "    Binary Leaf CSR:      $LEAF_BIN_CSR"
-echo "    Provenance Leaf CSR:  $LEAF_PROV_CSR"
-echo "    cosign Leaf CSR:      $LEAF_COSIGN_CSR"
-echo "    OTA Leaf CSR:         $LEAF_OTA_CSR"
-echo "    UEFI PK cert:         $UEFI_PK_CERT"
-echo "    UEFI PK CSR:          $UEFI_PK_CSR"
-echo "    UEFI KEK cert:        $UEFI_KEK_CERT"
-echo "    UEFI db cert:         $UEFI_DB_CERT"
-echo "    UEFI PK URI:          $UEFI_PK_URI_FILE"
-echo "    UEFI KEK URI:         $UEFI_KEK_URI_FILE"
-echo "    UEFI db URI:          $UEFI_DB_URI_FILE"
+if [[ "$CREATE_SLSA" -eq 1 ]]; then
+  echo "    Binary Leaf CSR:      $LEAF_BIN_CSR"
+  echo "    Provenance Leaf CSR:  $LEAF_PROV_CSR"
+fi
+if [[ "$CREATE_COSIGN" -eq 1 ]]; then
+  echo "    cosign Leaf CSR:      $LEAF_COSIGN_CSR"
+fi
+if [[ "$CREATE_OTA" -eq 1 ]]; then
+  echo "    OTA Leaf CSR:         $LEAF_OTA_CSR"
+fi
+if [[ "$CREATE_UEFI" -eq 1 ]]; then
+  echo "    UEFI PK cert:         $UEFI_PK_CERT"
+  echo "    UEFI PK CSR:          $UEFI_PK_CSR"
+  echo "    UEFI KEK cert:        $UEFI_KEK_CERT"
+  echo "    UEFI db cert:         $UEFI_DB_CERT"
+  echo "    UEFI PK URI:          $UEFI_PK_URI_FILE"
+  echo "    UEFI KEK URI:         $UEFI_KEK_URI_FILE"
+  echo "    UEFI db URI:          $UEFI_DB_URI_FILE"
+fi
 echo "    Serial file:          $OUTDIR/*.srl (created by -CAcreateserial)"

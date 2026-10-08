@@ -9,6 +9,8 @@ CREATE_TEST_CA="$SCRIPT_DIR/create-test-ca.sh"
 
 "$CREATE_TEST_CA" --create-root
 
+CREATE_ALL=(--create-intermediate --create-slsa --create-cosign --create-ota --create-uefi)
+
 for env in dev prod dbg release; do
-  "$CREATE_TEST_CA" --env "$env"
+  "$CREATE_TEST_CA" "${CREATE_ALL[@]}" --env "$env"
 done
