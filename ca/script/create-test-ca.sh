@@ -63,6 +63,7 @@ INT_LABEL="${INT_LABEL:-ghaf-intermediate-ca}"
 LEAF_BIN_LABEL="${LEAF_BIN_LABEL:-GhafInfraSignECP256}"
 LEAF_PROV_LABEL="${LEAF_PROV_LABEL:-GhafInfraSignProv}"
 LEAF_COSIGN_LABEL="${LEAF_COSIGN_LABEL:-GhafInfraSignCosign}"
+LEAF_OTA_LABEL="${LEAF_OTA_LABEL:-GhafInfraSignOta}"
 UEFI_PK_LABEL="${UEFI_PK_LABEL:-PK}"
 UEFI_KEK_LABEL="${UEFI_KEK_LABEL:-KEK}"
 UEFI_DB_LABEL="${UEFI_DB_LABEL:-db}"
@@ -107,6 +108,7 @@ if [[ -n "$ENV_NAME" ]]; then
   LEAF_BIN_SUBJ="${LEAF_BIN_SUBJ} ${ENV_NAME}"
   LEAF_PROV_SUBJ="${LEAF_PROV_SUBJ} ${ENV_NAME}"
   LEAF_COSIGN_SUBJ="${LEAF_COSIGN_SUBJ} ${ENV_NAME}"
+  LEAF_OTA_SUBJ="${LEAF_OTA_SUBJ}.${ENV_NAME}"
   UEFI_PK_SUBJ="${UEFI_PK_SUBJ} ${ENV_NAME}"
   UEFI_KEK_SUBJ="${UEFI_KEK_SUBJ} ${ENV_NAME}"
   UEFI_DB_SUBJ="${UEFI_DB_SUBJ} ${ENV_NAME}"
@@ -125,6 +127,7 @@ INT_BASE="intermediate-ca${ENV_SUFFIX}"
 LEAF_BIN_BASE="GhafInfraSignECP256${ENV_SUFFIX}"
 LEAF_PROV_BASE="GhafInfraSignProv${ENV_SUFFIX}"
 LEAF_COSIGN_BASE="GhafInfraSignCosign${ENV_SUFFIX}"
+LEAF_OTA_BASE="GhafInfraSignOta${ENV_SUFFIX}"
 UEFI_PK_BASE="PK${ENV_SUFFIX}"
 UEFI_KEK_BASE="KEK${ENV_SUFFIX}"
 UEFI_DB_BASE="db${ENV_SUFFIX}"
@@ -143,6 +146,9 @@ LEAF_PROV_CERT="$OUTDIR/${LEAF_PROV_BASE}.pem"
 
 LEAF_COSIGN_CSR="$OUTDIR/${LEAF_COSIGN_BASE}.csr"
 LEAF_COSIGN_CERT="$OUTDIR/${LEAF_COSIGN_BASE}.pem"
+
+LEAF_OTA_CSR="$OUTDIR/${LEAF_OTA_BASE}.csr"
+LEAF_OTA_CERT="$OUTDIR/${LEAF_OTA_BASE}.pem"
 
 UEFI_OUT_DIR="${UEFI_OUT_DIR:-$OUTDIR/uefi/keys}"
 UEFI_PK_DIR="$UEFI_OUT_DIR/PK"
@@ -400,6 +406,32 @@ openssl x509 -in "$UEFI_PK_CERT" -outform DER -out "$UEFI_PK_DER"
 openssl x509 -in "$UEFI_KEK_CERT" -outform DER -out "$UEFI_KEK_DER"
 openssl x509 -in "$UEFI_DB_CERT" -outform DER -out "$UEFI_DB_DER"
 
+# --- 12) Leaf certificate for OTA signed by Intermediate CA (key in netHSM) ---
+echo "[*] Creating OTA Leaf keypair in netHSM (label: $LEAF_OTA_LABEL)"
+pkcs11-tool --module "$P11MODULE" \
+  --keypairgen --key-type EC:ED25519 \
+  --label "$LEAF_OTA_LABEL"
+
+echo "[*] Creating OTA Leaf CSR -> $LEAF_OTA_CSR"
+openssl req -new \
+	-provider pkcs11 -provider default \
+        -key "pkcs11:token=${TOKEN_LABEL};object=$LEAF_OTA_LABEL" \
+        -out "$LEAF_OTA_CSR" \
+        -subj "$LEAF_OTA_SUBJ"
+
+echo "[*] Signing OTA Leaf certificate with Intermediate CA -> $LEAF_OTA_CERT"
+openssl x509 -req \
+  -in "$LEAF_OTA_CSR" \
+  -provider pkcs11 -provider default \
+  -CA "$INT_CERT" \
+  -CAkey "$INT_KEY_URI" \
+  -CAcreateserial \
+  -days "$LEAF_DAYS" -sha256 \
+  -extfile "$LEAF_EXT" \
+  -out "$LEAF_OTA_CERT"
+
+
+
 echo
 echo "[+] Done."
 echo "    Root CA cert:         $ROOT_CERT"
@@ -407,6 +439,7 @@ echo "    Intermediate CA cert: $INT_CERT"
 echo "    Binary Leaf cert:     $LEAF_BIN_CERT"
 echo "    Provenance Leaf cert: $LEAF_PROV_CERT"
 echo "    cosign Leaf cert:     $LEAF_COSIGN_CERT"
+echo "    OTA Leaf cert:        $LEAF_OTA_CERT"
 if [[ "$CREATE_ROOT" -eq 1 ]]; then
   echo "    Root CSR:             $ROOT_CSR"
 fi
@@ -414,6 +447,7 @@ echo "    Intermediate CSR:     $INT_CSR"
 echo "    Binary Leaf CSR:      $LEAF_BIN_CSR"
 echo "    Provenance Leaf CSR:  $LEAF_PROV_CSR"
 echo "    cosign Leaf CSR:      $LEAF_COSIGN_CSR"
+echo "    OTA Leaf CSR:         $LEAF_OTA_CSR"
 echo "    UEFI PK cert:         $UEFI_PK_CERT"
 echo "    UEFI PK CSR:          $UEFI_PK_CSR"
 echo "    UEFI KEK cert:        $UEFI_KEK_CERT"
