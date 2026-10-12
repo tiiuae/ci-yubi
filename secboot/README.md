@@ -124,6 +124,26 @@ The entry file name stays stable so `bootctl list --json` keeps reporting the sa
 
 Please save your PK, KEK, and DB files in DER format on a FAT32-formatted USB drive. Then reboot your target test machine and press F1 during startup to enter the BIOS setup.
 
+## Signing manifest-v2 sysupdate bundles
+
+```sh
+nix run .#uefi-sign-sysupdate -- keys/db.crt \
+  'pkcs11:token=NetHSM;object=uefi-ghaf-db' \
+  result/update.manifest signed-update
+```
+
+The certificate must be a local public certificate file; the private key can be
+a file or a PKCS#11 URI. The manifest and its root, verity, and UKI artifacts must
+resolve to regular files in `/nix/store`. The destination must be new or empty.
+
+The signer applies Ghaf's manifest-v2 metadata and filename validation rules,
+copies all three artifacts into staging, and checks their original SHA-256 hashes
+and packed sizes before signing. It signs the UKI with `systemd-sbsign` and verifies
+the signature with `sbverify`. The output contains all three artifacts and the
+finalized manifest, with updated hashes, packed sizes, and UKI unpacked size.
+Root and verity unpacked sizes and release metadata are preserved. The manifest
+is published last, atomically.
+
 ## Provisioning (Enrolling) Secure Boot Keys / Certificates
 
 In BIOS:

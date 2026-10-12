@@ -110,6 +110,7 @@
           name = "uefi-sign-sysupdate";
           runtimeInputs = [
             pkgs.python3
+            pkgs.sbsigntool
             systemd-sbsign
           ];
           text = ''
@@ -288,7 +289,7 @@
           uefi-sign-sysupdate = {
             type = "app";
             program = "${uefi-sign-sysupdate}/bin/uefi-sign-sysupdate";
-            meta.description = "Sign sysupdate UKIs and rehash sysupdate manifests";
+            meta.description = "Validate and sign manifest-v2 sysupdate bundles";
           };
         };
       }
