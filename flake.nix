@@ -124,6 +124,7 @@
             (with pkgs; [
               bmaptool
               coreutils
+              diffutils
               findutils
               gnugrep
               jq

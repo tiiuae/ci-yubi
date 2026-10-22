@@ -32,6 +32,10 @@ while (($#)); do
   esac
 done
 [[ -n $key_dir && -n $private_key && -n $input && -n $output ]] || usage
+command -v cmp >/dev/null || {
+  echo "cmp (diffutils) is required to verify the ESP inventory" >&2
+  exit 1
+}
 [[ $private_key == pkcs11:* ]] || {
   echo "--private-key must be a PKCS#11 URI" >&2
   exit 2
