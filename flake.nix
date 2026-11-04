@@ -129,6 +129,7 @@
               gnugrep
               jq
               mtools
+              openssl
               python3
               sbsigntool
               util-linux
@@ -277,6 +278,15 @@
         };
 
         formatter = pkgs.nixfmt-tree;
+
+        checks.enrollment-verifier = pkgs.runCommand "enrollment-verifier-tests" {
+          nativeBuildInputs = [ pkgs.python3 pkgs.openssl ];
+        } ''
+          cp ${./secboot/verify-enrollment.py} verify-enrollment.py
+          cp ${./secboot/test_verify_enrollment.py} test_verify_enrollment.py
+          python3 test_verify_enrollment.py
+          touch "$out"
+        '';
 
         packages = {
           inherit
