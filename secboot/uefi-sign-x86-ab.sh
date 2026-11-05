@@ -80,6 +80,8 @@ done
 work=$(mktemp -d)
 cleanup() { rm -rf "$work"; }
 trap cleanup EXIT
+# Do not inherit mtools' current directory from ~/.mcwd or a caller's MCWD.
+export MCWD="$work/mcwd"
 
 zstd -d "$input/ghaf-image.raw.zst" -o "$work/ghaf-image.raw"
 chmod u+w "$work/ghaf-image.raw"
@@ -91,7 +93,7 @@ esp_offset=$(
 )
 esp_image="$work/ghaf-image.raw@@$esp_offset"
 mkdir "$work/esp"
-mcopy -s -i "$esp_image" '::*' "$work/esp/"
+mcopy -s -i "$esp_image" '::/*' "$work/esp/"
 (
   cd "$work/esp"
   find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum
@@ -101,7 +103,8 @@ cmp -s "$input/esp.sha256" "$work/esp.sha256" || {
   exit 1
 }
 
-if find "$work/esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -print -quit 2>/dev/null | grep -q .; then
+if find "$work/esp" -mindepth 3 -maxdepth 3 -type f \
+  -ipath "$work/esp/loader/entries/*" -iname '*.conf' -print -quit | grep -q .; then
   echo "Type-1 boot entries remain in loader/entries; refusing an image whose initrd/cmdline are not UKI-bound" >&2
   exit 1
 fi
@@ -115,7 +118,7 @@ sign_one() {
     --certificate "$key_dir/db.crt" \
     --output "$signed" "$file"
   sbverify --cert "$key_dir/db.crt" "$signed" >/dev/null
-  mcopy -o -i "$esp_image" "$signed" "::${file#"$work/esp/"}"
+  mcopy -o -i "$esp_image" "$signed" "::/${file#"$work/esp/"}"
   rm -f "$signed"
 }
 

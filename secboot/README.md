@@ -169,6 +169,10 @@ PKCS#11 key, then verifies each signature. The output contains a new
 `ghaf-image.raw.zst`, regenerated `ghaf-image.bmap`, and matching public
 enrollment material. The input image is not modified.
 
+The ESP inventory only checks consistency with the selected Nix build output;
+it does not establish where that output came from. CI must select an approved
+Ghaf source and trusted build before allowing HSM signing.
+
 ## Provisioning (Enrolling) Secure Boot Keys / Certificates
 
 In BIOS:
