@@ -98,7 +98,6 @@
               util-linux
               mtools
               zstd
-              jq
               android-tools
               openssl
               sbsigntool

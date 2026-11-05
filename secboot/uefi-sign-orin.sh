@@ -127,9 +127,7 @@ sign_recovery() {
   truncate -s %4096 "$output/boot.img"
   cat "$output/boot.img.sig" >> "$output/boot.img"
 
-  jq -n --arg flash_id "$flash_id" \
-    '{version: 1, flash_id: $flash_id}' \
-    > "$output/manifest.json"
+  printf '%s\n' "$flash_id" > "$output/flash-id"
   rm "$output/Image" "$output/db.crt" "$output/boot.img.sig"
 }
 
