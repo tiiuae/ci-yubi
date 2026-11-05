@@ -99,6 +99,9 @@
               mtools
               zstd
               jq
+              android-tools
+              openssl
+              sbsigntool
             ])
             ++ [
               systemd-sbsign
