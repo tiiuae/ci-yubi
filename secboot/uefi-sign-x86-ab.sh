@@ -78,7 +78,11 @@ done
 }
 
 work=$(mktemp -d)
-cleanup() { rm -rf "$work"; }
+staging=""
+cleanup() {
+  rm -rf "$work"
+  [[ -z $staging ]] || rm -rf "$staging"
+}
 trap cleanup EXIT
 # Do not inherit mtools' current directory from ~/.mcwd or a caller's MCWD.
 export MCWD="$work/mcwd"
@@ -103,8 +107,8 @@ cmp -s "$input/esp.sha256" "$work/esp.sha256" || {
   exit 1
 }
 
-if find "$work/esp" -mindepth 3 -maxdepth 3 -type f \
-  -ipath "$work/esp/loader/entries/*" -iname '*.conf' -print -quit | grep -q .; then
+if (cd "$work/esp" && find . -mindepth 3 -maxdepth 3 -type f \
+  -ipath './loader/entries/*.conf' -print -quit) | grep -q .; then
   echo "Type-1 boot entries remain in loader/entries; refusing an image whose initrd/cmdline are not UKI-bound" >&2
   exit 1
 fi
@@ -143,9 +147,11 @@ done
 
 sync -f "$work/ghaf-image.raw"
 
-mkdir -m 0700 "$output"
-bmaptool create "$work/ghaf-image.raw" -o "$output/ghaf-image.bmap"
-zstd -T0 --compress "$work/ghaf-image.raw" -o "$output/ghaf-image.raw.zst"
+output_parent=$(dirname -- "$output")
+output_name=$(basename -- "$output")
+staging=$(mktemp -d "$output_parent/.${output_name}.staging.XXXXXX")
+bmaptool create "$work/ghaf-image.raw" -o "$staging/ghaf-image.bmap"
+zstd -T0 --compress "$work/ghaf-image.raw" -o "$staging/ghaf-image.raw.zst"
 install -m 0644 \
   "$key_dir/PK.crt" \
   "$key_dir/KEK.crt" \
@@ -153,6 +159,8 @@ install -m 0644 \
   "$key_dir/KEK.auth" \
   "$key_dir/db.auth" \
   "$key_dir/db.crt" \
-  "$output/"
-install -m 0644 "$input/public-trust.json" "$output/"
+  "$staging/"
+install -m 0644 "$input/public-trust.json" "$staging/"
+mv -T --update=none-fail -- "$staging" "$output"
+staging=""
 echo "Signed x86 A/B image and matching enrollment payload written to $output"
