@@ -120,6 +120,28 @@
           '';
         };
 
+        uefi-sign-x86-ab = pkgs.writeShellApplication {
+          name = "uefi-sign-x86-ab";
+          runtimeInputs =
+            (with pkgs; [
+              bmaptool
+              coreutils
+              diffutils
+              findutils
+              gnugrep
+              jq
+              mtools
+              openssl
+              python3
+              sbsigntool
+              util-linux
+              zstd
+            ])
+            ++ [ systemd-sbsign ];
+          runtimeEnv.UEFI_VERIFY_ENROLLMENT = "${./secboot/verify-enrollment.py}";
+          text = builtins.readFile ./secboot/uefi-sign-x86-ab.sh;
+        };
+
         uefisignraw = pkgs.writeShellApplication {
           name = "uefisignraw";
           runtimeInputs =
@@ -259,6 +281,15 @@
 
         formatter = pkgs.nixfmt-tree;
 
+        checks.enrollment-verifier = pkgs.runCommand "enrollment-verifier-tests" {
+          nativeBuildInputs = [ pkgs.python3 pkgs.openssl ];
+        } ''
+          cp ${./secboot/verify-enrollment.py} verify-enrollment.py
+          cp ${./secboot/test_verify_enrollment.py} test_verify_enrollment.py
+          python3 test_verify_enrollment.py
+          touch "$out"
+        '';
+
         packages = {
           inherit
             sigver
@@ -268,6 +299,7 @@
             uefisign-simple
             uefisign-orin
             uefi-sign-sysupdate
+            uefi-sign-x86-ab
             uefikeygen
             uefisign-azure
             cert-to-auth
@@ -292,6 +324,12 @@
             type = "app";
             program = "${uefi-sign-sysupdate}/bin/uefi-sign-sysupdate";
             meta.description = "Validate and sign manifest-v2 sysupdate bundles";
+          };
+
+          uefi-sign-x86-ab = {
+            type = "app";
+            program = "${uefi-sign-x86-ab}/bin/uefi-sign-x86-ab";
+            meta.description = "Sign the EFI boot chain in a Ghaf x86 secure A/B disk image";
           };
         };
       }

@@ -144,6 +144,35 @@ finalized manifest, with updated hashes, packed sizes, and UKI unpacked size.
 Root and verity unpacked sizes and release metadata are preserved. The manifest
 is published last, atomically.
 
+## Signing an initial Ghaf x86 secure A/B image
+
+Build Ghaf's `*-secure-ab` target with a public `secure-ab-build-config`
+exported from the same key directory used for signing. The input must be the
+immutable Nix build output containing `ghaf-image.raw.zst`, `esp.sha256`, and
+`public-trust.json`. Keep the PKCS#11 private key in the token; the key directory
+contains only public certificates, `update.pub`, and enrollment `.auth` files.
+Configure the OpenSSL PKCS#11 provider for the token as described in
+[README_HSM.md](README_HSM.md) before running the signer.
+
+```sh
+nix run .#uefi-sign-x86-ab -- \
+  --key-dir /path/to/public-keys \
+  --private-key 'pkcs11:token=NetHSM;object=uefi-ghaf-db' \
+  --input result-x86-unsigned \
+  --output signed-x86-ab
+```
+
+The signer compares the key directory against the image's evaluated public
+trust and checks every ESP file against the build's inventory. It signs both
+systemd-boot copies and all UKIs in `EFI/Linux` with the db certificate and
+PKCS#11 key, then verifies each signature. The output contains a new
+`ghaf-image.raw.zst`, regenerated `ghaf-image.bmap`, and matching public
+enrollment material. The input image is not modified.
+
+The ESP inventory only checks consistency with the selected Nix build output;
+it does not establish where that output came from. CI must select an approved
+Ghaf source and trusted build before allowing HSM signing.
+
 ## Provisioning (Enrolling) Secure Boot Keys / Certificates
 
 In BIOS:
