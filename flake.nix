@@ -134,12 +134,13 @@
               openssl
               python3
               sbsigntool
-              util-linux
               zstd
             ])
             ++ [ systemd-sbsign ];
-          runtimeEnv.UEFI_VERIFY_ENROLLMENT = "${./secboot/verify-enrollment.py}";
-          text = builtins.readFile ./secboot/uefi-sign-x86-ab.sh;
+          runtimeEnv = {
+            UEFI_VERIFY_ENROLLMENT = "${./secboot/verify-enrollment.py}";
+          };
+          text = uefiRawImageLib + "\n" + builtins.readFile ./secboot/uefi-sign-x86-ab.sh;
         };
 
         uefisignraw = pkgs.writeShellApplication {
@@ -163,8 +164,7 @@
               systemd-sbsign
             ];
           runtimeEnv = {
-            UEFISIGN_STUB_DIR =
-              "${systemdEfiStubs}/lib/systemd/boot/efi";
+            UEFISIGN_STUB_DIR = "${systemdEfiStubs}/lib/systemd/boot/efi";
           };
           text = uefiRawImageLib + "\n" + builtins.readFile ./secboot/uefi-sign-raw.sh;
         };
@@ -191,10 +191,7 @@
               systemd-sbsign
               uefisignraw
             ];
-          text =
-            uefiRawImageLib
-            + "\n"
-            + builtins.readFile ./secboot/uefi-sign-iso.sh;
+          text = uefiRawImageLib + "\n" + builtins.readFile ./secboot/uefi-sign-iso.sh;
         };
 
         uefikeygen = pkgs.writeShellApplication {
@@ -281,14 +278,51 @@
 
         formatter = pkgs.nixfmt-tree;
 
-        checks.enrollment-verifier = pkgs.runCommand "enrollment-verifier-tests" {
-          nativeBuildInputs = [ pkgs.python3 pkgs.openssl ];
-        } ''
-          cp ${./secboot/verify-enrollment.py} verify-enrollment.py
-          cp ${./secboot/test_verify_enrollment.py} test_verify_enrollment.py
-          python3 test_verify_enrollment.py
-          touch "$out"
-        '';
+        checks.enrollment-verifier =
+          pkgs.runCommand "enrollment-verifier-tests"
+            {
+              nativeBuildInputs = [
+                pkgs.python3
+                pkgs.openssl
+              ];
+            }
+            ''
+              cp ${./secboot/verify-enrollment.py} verify-enrollment.py
+              cp ${./secboot/test_verify_enrollment.py} test_verify_enrollment.py
+              python3 test_verify_enrollment.py
+              touch "$out"
+            '';
+
+        checks.uefi-sign-x86-ab-bmap =
+          pkgs.runCommand "uefi-sign-x86-ab-bmap-tests"
+            {
+              nativeBuildInputs = with pkgs; [
+                bmaptool
+                coreutils
+                gptfdisk
+                zstd
+              ];
+            }
+            ''
+              truncate -s 8M input.raw
+              sgdisk --new=1:1MiB:+1MiB --typecode=1:ef00 input.raw
+              truncate -s 1M esp.img
+              printf 'signed EFI data' | dd of=esp.img conv=notrunc status=none
+              bmaptool create input.raw -o input.bmap
+              zstd -q input.raw -o input.raw.zst
+              cp input.raw expected.raw
+              dd if=esp.img of=expected.raw bs=1M seek=1 conv=notrunc status=none
+              . ${./secboot/uefi-raw-image-lib.sh}
+              uefisign_write_signed_raw_image \
+                input.raw.zst zst esp.img 1048576 1048576 signed.raw.zst zst
+
+              uefisign_regenerate_bmap signed.raw.zst input.bmap signed.bmap "$PWD"
+
+              zstd -q -dc signed.raw.zst | cmp expected.raw -
+              bmaptool copy --bmap signed.bmap signed.raw.zst reconstructed.raw
+              cmp expected.raw reconstructed.raw
+              touch "$out"
+            '';
 
         packages = {
           inherit

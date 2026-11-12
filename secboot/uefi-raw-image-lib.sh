@@ -74,8 +74,8 @@ uefisign_extract_raw_range_to_file() {
     uefisign_die "Failed to extract byte range from raw image"
   fi
   # For bounded reads dd exits after count_bytes and may close the pipe before
-  # zstd/cat finish writing. SIGPIPE is expected in that case.
-  if ((input_rc != 0 && input_rc != 141)); then
+  # zstd/cat finish writing. zstd reports this as 70; cat reports SIGPIPE (141).
+  if ((input_rc != 0 && input_rc != 70 && input_rc != 141)); then
     uefisign_die "Failed to read raw image stream"
   fi
 
@@ -120,7 +120,7 @@ uefisign_stream_raw_range() {
     return "$dd_rc"
   fi
   if [[ -n "$count_bytes" ]]; then
-    if ((input_rc != 0 && input_rc != 141)); then
+    if ((input_rc != 0 && input_rc != 70 && input_rc != 141)); then
       return "$input_rc"
     fi
   elif ((input_rc != 0)); then
@@ -332,4 +332,29 @@ uefisign_write_signed_raw_image() {
   esac
 
   mv -f -- "$output_tmp" "$output"
+}
+
+uefisign_regenerate_bmap() {
+  local signed_zst="$1" original_bmap="$2" bmap_out="$3" workdir="$4"
+  local raw_tmp="$workdir/bmap-source.raw"
+  local signed_esp="$workdir/signed-runtime-esp.img"
+  local efi_start efi_sectors efi_offset efi_size
+
+  rm -f -- "$raw_tmp" "$signed_esp" "$bmap_out"
+  uefisign_log "Reconstructing original sparse layout for bmap..."
+  # Preserve the original mapped blocks; their checksums change after signing.
+  bmaptool copy --no-verify --bmap "$original_bmap" "$signed_zst" "$raw_tmp"
+
+  # Signed EFI files may occupy blocks that were holes in the original image.
+  read -r efi_start efi_sectors < <(
+    uefisign_find_efi_partition "$signed_zst" zst "$workdir/bmap-partition-prefix.img"
+  )
+  efi_offset=$((efi_start * UEFISIGN_SECTOR_SIZE))
+  efi_size=$((efi_sectors * UEFISIGN_SECTOR_SIZE))
+  uefisign_extract_raw_range_to_file "$signed_zst" zst "$efi_offset" "$efi_size" "$signed_esp"
+  dd if="$signed_esp" of="$raw_tmp" bs="$UEFISIGN_SECTOR_SIZE" \
+    seek="$efi_start" conv=notrunc status=none
+
+  bmaptool create -o "$bmap_out" "$raw_tmp"
+  rm -f -- "$raw_tmp" "$signed_esp"
 }

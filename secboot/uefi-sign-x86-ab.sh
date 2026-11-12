@@ -45,7 +45,7 @@ input=$(realpath -e -- "$input")
   echo "--input must resolve to a Nix store directory" >&2
   exit 1
 }
-for required in public-trust.json ghaf-image.raw.zst esp.sha256; do
+for required in public-trust.json ghaf-image.raw.zst ghaf-image.bmap esp.sha256; do
   file=$(realpath -e -- "$input/$required") || {
     echo "Missing $input/$required" >&2
     exit 1
@@ -87,15 +87,14 @@ trap cleanup EXIT
 # Do not inherit mtools' current directory from ~/.mcwd or a caller's MCWD.
 export MCWD="$work/mcwd"
 
-zstd -d "$input/ghaf-image.raw.zst" -o "$work/ghaf-image.raw"
-chmod u+w "$work/ghaf-image.raw"
-esp_offset=$(
-  sfdisk --json "$work/ghaf-image.raw" |
-    jq -er '.partitiontable | .sectorsize as $sector |
-      [.partitions[] | select((.type | ascii_downcase) == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b")] |
-      if length == 1 then .[0].start * $sector else error("Expected exactly one ESP") end'
+read -r esp_start esp_sectors < <(
+  uefisign_find_efi_partition "$input/ghaf-image.raw.zst" zst "$work/partition-prefix.img"
 )
-esp_image="$work/ghaf-image.raw@@$esp_offset"
+esp_offset=$((esp_start * UEFISIGN_SECTOR_SIZE))
+esp_size=$((esp_sectors * UEFISIGN_SECTOR_SIZE))
+esp_image="$work/esp-partition.img"
+uefisign_extract_raw_range_to_file \
+  "$input/ghaf-image.raw.zst" zst "$esp_offset" "$esp_size" "$esp_image"
 mkdir "$work/esp"
 mcopy -s -i "$esp_image" '::/*' "$work/esp/"
 (
@@ -145,13 +144,15 @@ for uki in "${ukis[@]}"; do
   sign_one "$uki"
 done
 
-sync -f "$work/ghaf-image.raw"
-
 output_parent=$(dirname -- "$output")
 output_name=$(basename -- "$output")
 staging=$(mktemp -d "$output_parent/.${output_name}.staging.XXXXXX")
-bmaptool create "$work/ghaf-image.raw" -o "$staging/ghaf-image.bmap"
-zstd -T0 --compress "$work/ghaf-image.raw" -o "$staging/ghaf-image.raw.zst"
+uefisign_write_signed_raw_image \
+  "$input/ghaf-image.raw.zst" zst "$esp_image" "$esp_offset" "$esp_size" \
+  "$staging/ghaf-image.raw.zst" zst
+uefisign_regenerate_bmap \
+  "$staging/ghaf-image.raw.zst" "$input/ghaf-image.bmap" \
+  "$staging/ghaf-image.bmap" "$work"
 install -m 0644 \
   "$key_dir/PK.crt" \
   "$key_dir/KEK.crt" \

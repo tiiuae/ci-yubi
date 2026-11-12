@@ -44,70 +44,6 @@ fat_path() {
   printf '%s' "$p"
 }
 
-regenerate_bmap() {
-    local signed_zst="$1"
-    local original_bmap="$2"
-    local bmap_out="$3"
-
-    local raw_tmp="$WORK/bmap-source.raw"
-    local signed_esp="$WORK/signed-runtime-esp.img"
-
-    rm -f -- "$raw_tmp" "$signed_esp" "$bmap_out"
-
-    log "[*] Reconstructing original sparse layout..."
-
-    #
-    # Preserve the ORIGINAL Ghaf hole/mapped-block layout.
-    #
-    # Checksums are deliberately disabled here because the ESP has been
-    # modified by signing. This is only an internal reconstruction; the new
-    # bmap generated below gets fresh checksums.
-    #
-    bmaptool copy \
-        --no-verify \
-        --bmap "$original_bmap" \
-        "$signed_zst" \
-        "$raw_tmp"
-
-    #
-    # Now force the complete signed ESP into the reconstructed RAW.
-    # This is necessary because signing may have turned blocks which were
-    # holes in the original ESP into real data.
-    #
-    read -r EFI_START EFI_SECTORS < <(
-        uefisign_find_efi_partition \
-            "$signed_zst" \
-            zst \
-            "$WORK/bmap-partition-prefix.img"
-    )
-
-    local efi_offset=$((EFI_START * 512))
-    local efi_size=$((EFI_SECTORS * 512))
-
-    uefisign_extract_raw_range_to_file \
-        "$signed_zst" \
-        zst \
-        "$efi_offset" \
-        "$efi_size" \
-        "$signed_esp"
-
-    dd \
-        if="$signed_esp" \
-        of="$raw_tmp" \
-        bs=512 \
-        seek="$EFI_START" \
-        conv=notrunc \
-        status=none
-
-    log "[*] Generating bmap with preserved Ghaf sparse layout..."
-
-    bmaptool create \
-        -o "$bmap_out" \
-        "$raw_tmp"
-
-    rm -f -- "$raw_tmp" "$signed_esp"
-}
-
 detect_boot_efi_name() {
   local img="$1" boot
 
@@ -371,10 +307,11 @@ SIGNED_OUT="$(
 if $HAVE_BMAP; then
   SIGNED_BMAP="$WORK/ghaf-image.bmap"
 
-  regenerate_bmap \
+  uefisign_regenerate_bmap \
       "$SIGNED_OUT" \
       "$BMAP_ISO_PATH" \
-      "$SIGNED_BMAP"
+      "$SIGNED_BMAP" \
+      "$WORK"
 fi
 
 #
